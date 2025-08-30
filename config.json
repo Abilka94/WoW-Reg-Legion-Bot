@@ -1,0 +1,17 @@
+{
+    "features": {
+        "registration": true,
+        "password_reset": true,
+        "account_management": true,
+        "changelog": true,
+        "admin_panel": true,
+        "admin_broadcast": true,
+        "admin_check_db": true,
+        "admin_download_log": true,
+        "admin_delete_account": true,
+        "admin_reload_config": true
+    },
+    "settings": {
+        "max_accounts_per_user": 3
+    }
+}

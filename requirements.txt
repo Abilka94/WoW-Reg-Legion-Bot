@@ -1,0 +1,5 @@
+aiogram==3.4.1
+aiomysql==0.2.0
+redis==5.0.1
+python-dotenv==1.0.0
+PyMySQL==1.1.0
