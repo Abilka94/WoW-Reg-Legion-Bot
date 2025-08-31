@@ -1,0 +1,41 @@
+# 👥 CODEOWNERS - Автоматическое назначение ревьюеров
+
+# Глобальные владельцы кода - требуется ревью для всех изменений
+* @Abilka94
+
+# Критические файлы - требуется обязательное ревью
+main.py @Abilka94
+main_*.py @Abilka94
+requirements.txt @Abilka94
+
+# Конфигурационные файлы
+config.json @Abilka94
+.env.example @Abilka94
+settings.py @Abilka94
+
+# Модули базы данных
+src/database/ @Abilka94
+src/config/ @Abilka94
+
+# Обработчики (требуют тщательного ревью)
+src/handlers/ @Abilka94
+
+# Безопасность и валидация
+src/utils/validators.py @Abilka94
+src/utils/middleware.py @Abilka94
+
+# Документация
+*.md @Abilka94
+.github/ @Abilka94
+
+# Тестовые файлы
+test_*.py @Abilka94
+**/test_*.py @Abilka94
+
+# GitHub Actions и CI/CD
+.github/workflows/ @Abilka94
+.github/actions/ @Abilka94
+
+# Администраторские функции
+src/handlers/admin.py @Abilka94
+src/keyboards/admin_keyboards.py @Abilka94
