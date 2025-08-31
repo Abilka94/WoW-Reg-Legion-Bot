@@ -160,9 +160,9 @@ TOKEN=ваш_токен_бота
 ADMIN_ID=ваш_telegram_id
 DB_HOST=127.0.0.1
 DB_PORT=3310
-DB_USER=spp_user
+DB_USER=user
 DB_PASSWORD=password
-DB_NAME=legion_auth
+DB_NAME=auth
 REDIS_DSN=redis://127.0.0.1:6379/0
 ```
 
