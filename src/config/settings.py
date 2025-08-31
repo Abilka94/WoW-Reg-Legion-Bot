@@ -26,7 +26,6 @@ DEFAULT_CONFIG = {
         "registration": True,
         "password_reset": True,
         "account_management": True,
-        "changelog": True,
         "admin_panel": True,
         "admin_broadcast": True,
         "admin_check_db": True,

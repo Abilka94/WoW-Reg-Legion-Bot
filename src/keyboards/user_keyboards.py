@@ -25,9 +25,6 @@ def kb_main():
     if row:
         buttons.append(row)
     
-    if CONFIG["features"]["changelog"]:
-        buttons.append([InlineKeyboardButton(text=T["menu_chlog"], callback_data="show_changelog")])
-    
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 def kb_wizard(step):

@@ -17,7 +17,6 @@ TRANSLATIONS = {
     "menu_news": "Новости",
     "menu_acc": "🔑 Мой аккаунт",
     "menu_fgt": "🔄 Сбросить пароль",
-    "menu_chlog": "📜 Полный Changelog",
     "back": "◀ Назад",
     "cancel": "❌ Отмена",
     "version_pre": "Версия бота: ",
