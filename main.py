@@ -123,7 +123,7 @@ async def main():
     @dp.message(Command("start"))
     async def cmd_start(message: Message, state: FSMContext):
         await state.clear()
-        await message.answer(T["start"], reply_markup=kb_main())
+        await message.answer(T["start"].format(version=BOT_VERSION), reply_markup=kb_main())
         logger.info(f"Команда /start от пользователя {message.from_user.id}")
 
     @dp.message(Command("version"))
@@ -156,9 +156,9 @@ async def main():
     async def cb_back_main(callback: CallbackQuery, state: FSMContext):
         await state.clear()
         try:
-            await callback.message.edit_text(T["start"], reply_markup=kb_main())
+            await callback.message.edit_text(T["start"].format(version=BOT_VERSION), reply_markup=kb_main())
         except:
-            await callback.message.answer(T["start"], reply_markup=kb_main())
+            await callback.message.answer(T["start"].format(version=BOT_VERSION), reply_markup=kb_main())
         await callback.answer()
 
     @dp.callback_query(F.data == "show_info")
@@ -264,7 +264,7 @@ async def main():
         
         if new_password in (T["to_main"], T["cancel"]):
             await state.clear()
-            await message.answer(T["start"], reply_markup=kb_main())
+            await message.answer(T["start"].format(version=BOT_VERSION), reply_markup=kb_main())
             return
         
         if not validate_password(new_password):
@@ -319,14 +319,14 @@ async def main():
         
         if callback.data == "wiz_cancel":
             await state.clear()
-            await callback.message.edit_text(T["start"], reply_markup=kb_main())
+            await callback.message.edit_text(T["start"].format(version=BOT_VERSION), reply_markup=kb_main())
             await callback.answer()
             return
         
         # Обработка wiz_back
         if current_state == RegistrationStates.nick.state:
             await state.clear()
-            await callback.message.edit_text(T["start"], reply_markup=kb_main())
+            await callback.message.edit_text(T["start"].format(version=BOT_VERSION), reply_markup=kb_main())
         elif current_state == RegistrationStates.pwd.state:
             await state.set_state(RegistrationStates.nick)
             text = f"1/3 · {T['progress'][0]}"

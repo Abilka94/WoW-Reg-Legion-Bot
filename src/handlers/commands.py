@@ -27,7 +27,7 @@ def register_command_handlers(dp, pool, bot_instance):
     async def cmd_start(m: Message, state: FSMContext):
         await state.clear()
         await delete_all_bot_messages(m.from_user.id, bot_instance)
-        msg = await m.answer(T["start"], reply_markup=kb_main())
+        msg = await m.answer(T["start"].format(version=BOT_VERSION), reply_markup=kb_main())
         record_message(m.from_user.id, msg, "command")
         await delete_user_message(m)
 
@@ -133,9 +133,9 @@ def register_callback_handlers(dp, pool, bot_instance):
         await state.clear()
         await delete_all_bot_messages(c.from_user.id, bot_instance)
         try:
-            msg = await c.message.edit_text(T["start"], reply_markup=kb_main())
+            msg = await c.message.edit_text(T["start"].format(version=BOT_VERSION), reply_markup=kb_main())
         except:
-            msg = await bot_instance.send_message(c.from_user.id, T["start"], reply_markup=kb_main())
+            msg = await bot_instance.send_message(c.from_user.id, T["start"].format(version=BOT_VERSION), reply_markup=kb_main())
         record_message(c.from_user.id, msg, "command")
         await c.answer()
 

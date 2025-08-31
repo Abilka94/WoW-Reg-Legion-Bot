@@ -8,7 +8,7 @@ from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKe
 from aiogram.fsm.context import FSMContext
 from aiogram.exceptions import TelegramBadRequest
 
-from ..config.settings import CONFIG
+from ..config.settings import CONFIG, BOT_VERSION
 from ..config.translations import TRANSLATIONS as T
 from ..states.user_states import RegistrationStates
 from ..keyboards.user_keyboards import kb_main, kb_wizard
@@ -61,7 +61,7 @@ def register_registration_handlers(dp, pool, bot_instance):
             await state.clear()
             await delete_all_bot_messages(c.from_user.id)
             from ..main import bot
-            msg = await bot.send_message(c.from_user.id, T["start"], reply_markup=kb_main())
+            msg = await bot.send_message(c.from_user.id, T["start"].format(version=BOT_VERSION), reply_markup=kb_main())
             record_message(c.from_user.id, msg, "command")
             logger.info(f"Регистрация отменена для user_id={c.from_user.id}")
             await c.answer()
@@ -71,7 +71,7 @@ def register_registration_handlers(dp, pool, bot_instance):
             await state.clear()
             await delete_all_bot_messages(c.from_user.id)
             from ..main import bot
-            msg = await bot.send_message(c.from_user.id, T["start"], reply_markup=kb_main())
+            msg = await bot.send_message(c.from_user.id, T["start"].format(version=BOT_VERSION), reply_markup=kb_main())
             record_message(c.from_user.id, msg, "command")
             logger.info(f"Возврат в главное меню из RegistrationStates.nick для user_id={c.from_user.id}")
             await c.answer()

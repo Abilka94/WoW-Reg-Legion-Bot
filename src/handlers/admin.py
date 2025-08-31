@@ -7,7 +7,7 @@ from aiogram import F
 from aiogram.types import Message, CallbackQuery, FSInputFile, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
 
-from ..config.settings import CONFIG, ADMIN_ID
+from ..config.settings import CONFIG, ADMIN_ID, BOT_VERSION
 from ..config.translations import TRANSLATIONS as T
 from ..states.user_states import AdminStates
 from ..keyboards.admin_keyboards import kb_admin, kb_admin_back
@@ -248,6 +248,6 @@ def register_admin_handlers(dp, pool, bot_instance):
             await state.clear()
             await delete_all_bot_messages(c.from_user.id)
             from ..main import bot
-            msg = await bot.send_message(c.from_user.id, T["start"], reply_markup=kb_main())
+            msg = await bot.send_message(c.from_user.id, T["start"].format(version=BOT_VERSION), reply_markup=kb_main())
             record_message(c.from_user.id, msg, "command")
             await c.answer()

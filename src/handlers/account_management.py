@@ -7,7 +7,7 @@ from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKe
 from aiogram.fsm.context import FSMContext
 from aiogram.exceptions import TelegramBadRequest
 
-from ..config.settings import CONFIG
+from ..config.settings import CONFIG, BOT_VERSION
 from ..config.translations import TRANSLATIONS as T
 from ..states.user_states import ForgotPasswordStates, ChangePasswordStates
 from ..keyboards.user_keyboards import kb_main, kb_back, kb_account_list
@@ -41,7 +41,7 @@ def register_account_handlers(dp, pool, bot_instance):
             
             if mail in (T["to_main"], T["cancel"]):
                 await state.clear()
-                msg = await m.answer(T["start"], reply_markup=kb_main())
+                msg = await m.answer(T["start"].format(version=BOT_VERSION), reply_markup=kb_main())
                 record_message(m.from_user.id, msg, "command")
                 await delete_user_message(m)
                 return
@@ -185,7 +185,7 @@ def register_account_handlers(dp, pool, bot_instance):
             
             if new_password in (T["to_main"], T["cancel"]):
                 await state.clear()
-                msg = await m.answer(T["start"], reply_markup=kb_main())
+                msg = await m.answer(T["start"].format(version=BOT_VERSION), reply_markup=kb_main())
                 record_message(m.from_user.id, msg, "command")
                 await delete_user_message(m)
                 return
