@@ -25,10 +25,6 @@ def kb_main():
     if row:
         buttons.append(row)
     
-    # Добавляем кнопку валютного магазина
-    if CONFIG.get("features", {}).get("currency_shop", False) and CONFIG.get("currency_shop", {}).get("enabled", False):
-        buttons.append([InlineKeyboardButton(text="💰 Купить валюту", callback_data="coins_menu")])
-    
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 def kb_wizard(step):
@@ -57,6 +53,10 @@ def kb_account_list(accounts, selected_email=None):
         if CONFIG["features"]["account_management"]:
             buttons.append([InlineKeyboardButton(text=T["change_password_prompt"], callback_data="change_password")])
             buttons.append([InlineKeyboardButton(text=T["delete_account_prompt"], callback_data=f"delete_account_{selected_email}")])
+    
+    # Добавляем кнопку валютного магазина в личный кабинет
+    if CONFIG.get("features", {}).get("currency_shop", False) and CONFIG.get("currency_shop", {}).get("enabled", False):
+        buttons.append([InlineKeyboardButton(text="💰 Купить валюту", callback_data="coins_menu")])
     
     buttons.append([InlineKeyboardButton(text=T["to_main"], callback_data="back_to_main")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
