@@ -25,6 +25,10 @@ def kb_main():
     if row:
         buttons.append(row)
     
+    # Добавляем кнопку валютного магазина
+    if CONFIG.get("features", {}).get("currency_shop", False) and CONFIG.get("currency_shop", {}).get("enabled", False):
+        buttons.append([InlineKeyboardButton(text="💰 Купить валюту", callback_data="coins_menu")])
+    
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 def kb_wizard(step):
@@ -55,4 +59,37 @@ def kb_account_list(accounts, selected_email=None):
             buttons.append([InlineKeyboardButton(text=T["delete_account_prompt"], callback_data=f"delete_account_{selected_email}")])
     
     buttons.append([InlineKeyboardButton(text=T["to_main"], callback_data="back_to_main")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+def kb_coins_menu():
+    """Клавиатура для меню валюты"""
+    buttons = [
+        [InlineKeyboardButton(text="💰 Купить валюту", callback_data="buy_coins")],
+        [InlineKeyboardButton(text="💳 Мой баланс", callback_data="check_balance")],
+        [InlineKeyboardButton(text=T["to_main"], callback_data="back_to_main")]
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+def kb_coins_packages():
+    """Клавиатура с пакетами валюты"""
+    buttons = [
+        [InlineKeyboardButton(text="🪙 100 монет - 50₽", callback_data="buy_coins_100")],
+        [InlineKeyboardButton(text="🪙 200 монет - 90₽", callback_data="buy_coins_200")],
+        [InlineKeyboardButton(text="💰 300 монет - 130₽", callback_data="buy_coins_300")],
+        [InlineKeyboardButton(text="💰 400 монет - 160₽", callback_data="buy_coins_400")],
+        [InlineKeyboardButton(text="💎 500 монет - 200₽", callback_data="buy_coins_500")],
+        [InlineKeyboardButton(text="✍️ Свое количество", callback_data="buy_coins_custom")],
+        [InlineKeyboardButton(text="◀️ Назад", callback_data="coins_menu")]
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+def kb_account_select_for_coins(accounts):
+    """Клавиатура для выбора аккаунта для добавления валюты"""
+    buttons = []
+    
+    for email, username, is_temp, temp_password, coins in accounts:
+        text = f"📧 {email} (💰 {coins} монет)"
+        buttons.append([InlineKeyboardButton(text=text, callback_data=f"coins_select_{email}")])
+    
+    buttons.append([InlineKeyboardButton(text="◀️ Назад", callback_data="coins_menu")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)

@@ -191,3 +191,47 @@ async def admin_delete_account(pool, email):
             else:
                 logger.warning(f"Админ не смог удалить аккаунт: email={mu}")
             return affected > 0
+
+async def get_account_coins(pool, email):
+    """Получает количество монет на аккаунте"""
+    mu = email.upper()
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute("SELECT coins FROM account WHERE email=%s", (mu,))
+            result = await cur.fetchone()
+            return result[0] if result else 0
+
+async def add_coins_to_account(pool, email, amount):
+    """Добавляет монеты на аккаунт (заглушка покупки)"""
+    mu = email.upper()
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                "UPDATE account SET coins = coins + %s WHERE email=%s",
+                (amount, mu)
+            )
+            affected = cur.rowcount
+            
+            if affected:
+                # Получаем новый баланс
+                await cur.execute("SELECT coins FROM account WHERE email=%s", (mu,))
+                new_balance = (await cur.fetchone())[0]
+                logger.info(f"Добавлено {amount} монет на аккаунт {mu}. Новый баланс: {new_balance}")
+                return new_balance
+            else:
+                logger.warning(f"Не удалось добавить монеты на аккаунт {mu}")
+                return None
+
+async def get_user_accounts_with_coins(pool, telegram_id):
+    """Получает информацию об аккаунтах пользователя с балансом монет"""
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                "SELECT b.email, a.username, b.is_temp_password, b.temp_password, COALESCE(a.coins, 0) "
+                "FROM users u "
+                "JOIN battlenet_accounts b ON u.email = b.email "
+                "LEFT JOIN account a ON b.email = a.email "
+                "WHERE u.telegram_id=%s",
+                (telegram_id,)
+            )
+            return await cur.fetchall()

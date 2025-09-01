@@ -20,16 +20,18 @@ from logging.handlers import TimedRotatingFileHandler
 # Импорты модулей
 from src.config.settings import load_config, TOKEN, REDIS_DSN, BOT_VERSION, CONFIG, ADMIN_ID
 from src.config.translations import TRANSLATIONS as T
+from src.config.currency_config import CURRENCY_SHOP_CONFIG, reload_currency_config
 from src.database.connection import get_pool
 from src.database.user_operations import (
     get_account_info, delete_account, admin_delete_account,
-    register_user, reset_password, change_password
+    register_user, reset_password, change_password,
+    get_account_coins, add_coins_to_account, get_user_accounts_with_coins
 )
 from src.utils.middleware import RateLimit
 from src.utils.validators import validate_email, validate_nickname, validate_password
-from src.keyboards.user_keyboards import kb_main, kb_back
+from src.keyboards.user_keyboards import kb_main, kb_back, kb_coins_menu, kb_coins_packages, kb_account_select_for_coins
 from src.keyboards.admin_keyboards import kb_admin, kb_admin_back
-from src.states.user_states import RegistrationStates, ForgotPasswordStates, ChangePasswordStates, AdminStates
+from src.states.user_states import RegistrationStates, ForgotPasswordStates, ChangePasswordStates, AdminStates, BuyCoinsStates
 
 def setup_logging():
     """Настройка логирования"""
@@ -407,6 +409,194 @@ async def main():
             logger.error(f"Ошибка регистрации: {e}")
             await message.answer(T["err_exists"], reply_markup=kb_main())
 
+    # ==================== ВАЛЮТНЫЙ МАГАЗИН ====================
+    
+    @dp.callback_query(F.data == "coins_menu")
+    async def cb_coins_menu(callback: CallbackQuery, state: FSMContext):
+        await state.clear()
+        
+        # Проверяем, включен ли магазин
+        if not CONFIG.get("features", {}).get("currency_shop", False):
+            await callback.answer(T["feature_disabled"], show_alert=True)
+            return
+            
+        if not CONFIG.get("currency_shop", {}).get("enabled", False):
+            await callback.answer(T["shop_disabled"], show_alert=True)
+            return
+            
+        if not CURRENCY_SHOP_CONFIG.get("shop_enabled", False):
+            await callback.answer(T["shop_disabled"], show_alert=True)
+            return
+            
+        await callback.message.edit_text(T["coins_menu"], reply_markup=kb_coins_menu())
+        await callback.answer()
+
+    @dp.callback_query(F.data == "buy_coins")
+    async def cb_buy_coins(callback: CallbackQuery, state: FSMContext):
+        await state.clear()
+        
+        # Проверяем, включены ли покупки
+        if not CONFIG.get("currency_shop", {}).get("purchase", False):
+            await callback.answer(T["purchase_disabled"], show_alert=True)
+            return
+            
+        await callback.message.edit_text(T["buy_coins"], reply_markup=kb_coins_packages())
+        await callback.answer()
+
+    @dp.callback_query(F.data == "check_balance")
+    async def cb_check_balance(callback: CallbackQuery, state: FSMContext):
+        await state.clear()
+        
+        # Проверяем, включена ли проверка баланса
+        if not CONFIG.get("currency_shop", {}).get("balance_check", False):
+            await callback.answer(T["feature_disabled"], show_alert=True)
+            return
+            
+        if not pool:
+            await callback.answer("База данных недоступна", show_alert=True)
+            return
+            
+        try:
+            accounts = await get_user_accounts_with_coins(pool, callback.from_user.id)
+            if not accounts:
+                await callback.message.edit_text(T["no_accounts_for_coins"], reply_markup=kb_back())
+                await callback.answer()
+                return
+            
+            accounts_info = ""
+            for email, username, is_temp, temp_password, coins in accounts:
+                accounts_info += f"📧 {email}\n💰 {coins or 0} монет\n\n"
+            
+            text = T["account_balance"].format(accounts_info=accounts_info.strip())
+            await callback.message.edit_text(text, reply_markup=kb_back())
+            await callback.answer()
+            
+        except Exception as e:
+            logger.error(f"Ошибка при получении баланса: {e}")
+            await callback.answer("Ошибка при получении данных", show_alert=True)
+
+    @dp.callback_query(F.data.startswith("buy_coins_"))
+    async def cb_buy_coins_package(callback: CallbackQuery, state: FSMContext):
+        await state.clear()
+        if not pool:
+            await callback.answer("База данных недоступна", show_alert=True)
+            return
+
+        # Получаем количество монет из callback_data
+        package = callback.data.split("_")[-1]
+        
+        if package == "custom":
+            # Проверяем, разрешен ли кастомный ввод
+            if not CURRENCY_SHOP_CONFIG.get("custom_purchase", {}).get("enabled", False):
+                await callback.answer("Кастомные покупки отключены", show_alert=True)
+                return
+                
+            await state.set_state(BuyCoinsStates.entering_amount)
+            await callback.message.edit_text(T["enter_coins_amount"], reply_markup=kb_back())
+            await callback.answer()
+            return
+        
+        # Предустановленные пакеты из конфига
+        package_config = CURRENCY_SHOP_CONFIG.get("currency_packages", {}).get(package, {})
+        coins_amount = package_config.get("amount", 0)
+        
+        if coins_amount == 0:
+            await callback.answer("Неизвестный пакет", show_alert=True)
+            return
+        
+        # Получаем аккаунты пользователя
+        try:
+            accounts = await get_user_accounts_with_coins(pool, callback.from_user.id)
+            if not accounts:
+                await callback.message.edit_text(T["no_accounts_for_coins"], reply_markup=kb_back())
+                await callback.answer()
+                return
+            
+            await state.update_data(coins_amount=coins_amount)
+            await state.set_state(BuyCoinsStates.selecting_account)
+            
+            text = T["select_account_for_coins"]
+            await callback.message.edit_text(text, reply_markup=kb_account_select_for_coins(accounts))
+            await callback.answer()
+            
+        except Exception as e:
+            logger.error(f"Ошибка при получении аккаунтов: {e}")
+            await callback.answer("Ошибка при получении данных", show_alert=True)
+
+    @dp.callback_query(F.data.startswith("coins_select_"), BuyCoinsStates.selecting_account)
+    async def cb_coins_select_account(callback: CallbackQuery, state: FSMContext):
+        email = callback.data.replace("coins_select_", "")
+        data = await state.get_data()
+        coins_amount = data.get("coins_amount", 0)
+        
+        if coins_amount == 0:
+            await callback.answer("Ошибка: количество монет не определено", show_alert=True)
+            return
+        
+        try:
+            # Проверяем, включена ли заглушка платежной системы
+            if not CURRENCY_SHOP_CONFIG.get("payment_stub_enabled", False):
+                await callback.message.edit_text("❌ Платежная система отключена. Обратитесь к администратору.", reply_markup=kb_back())
+                await state.clear()
+                await callback.answer()
+                return
+                
+            # Добавляем монеты (заглушка - без реальной оплаты)
+            new_balance = await add_coins_to_account(pool, email, coins_amount)
+            
+            if new_balance is not None:
+                text = T["coins_purchased"].format(
+                    amount=coins_amount,
+                    email=email,
+                    balance=new_balance
+                )
+                await callback.message.edit_text(text, reply_markup=kb_back())
+                logger.info(f"Заглушка покупки: пользователь {callback.from_user.id} 'купил' {coins_amount} монет для {email}")
+            else:
+                await callback.message.edit_text(T["coins_purchase_error"], reply_markup=kb_back())
+            
+            await state.clear()
+            await callback.answer()
+            
+        except Exception as e:
+            logger.error(f"Ошибка при добавлении монет: {e}")
+            await callback.message.edit_text(T["coins_purchase_error"], reply_markup=kb_back())
+            await state.clear()
+            await callback.answer()
+
+    @dp.message(BuyCoinsStates.entering_amount)
+    async def process_custom_coins_amount(message: Message, state: FSMContext):
+        try:
+            amount = int(message.text)
+            
+            # Проверяем лимиты из конфига
+            min_amount = CURRENCY_SHOP_CONFIG.get("custom_purchase", {}).get("min_amount", 1)
+            max_amount = CURRENCY_SHOP_CONFIG.get("custom_purchase", {}).get("max_amount", 10000)
+            
+            if amount < min_amount or amount > max_amount:
+                await message.answer(f"❌ Неверное количество монет. Введите число от {min_amount} до {max_amount}.")
+                return
+            
+            # Получаем аккаунты пользователя
+            accounts = await get_user_accounts_with_coins(pool, message.from_user.id)
+            if not accounts:
+                await message.answer(T["no_accounts_for_coins"], reply_markup=kb_back())
+                await state.clear()
+                return
+            
+            await state.update_data(coins_amount=amount)
+            await state.set_state(BuyCoinsStates.selecting_account)
+            
+            text = T["select_account_for_coins"]
+            await message.answer(text, reply_markup=kb_account_select_for_coins(accounts))
+            
+        except ValueError:
+            await message.answer(T["invalid_coins_amount"])
+        except Exception as e:
+            logger.error(f"Ошибка при обработке количества монет: {e}")
+            await message.answer(T["coins_purchase_error"], reply_markup=kb_back())
+            await state.clear()
+
     # ==================== АДМИН ПАНЕЛЬ ====================
     
     @dp.callback_query(F.data == "admin_check_db")
@@ -512,7 +702,8 @@ async def main():
             RegistrationStates.pwd.state,
             RegistrationStates.mail.state,
             ChangePasswordStates.new_password.state,
-            AdminStates.delete_account_input.state
+            AdminStates.delete_account_input.state,
+            BuyCoinsStates.entering_amount.state
         ):
             return
         

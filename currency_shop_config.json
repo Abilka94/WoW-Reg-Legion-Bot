@@ -1,0 +1,44 @@
+{
+    "shop_enabled": true,
+    "payment_stub_enabled": true,
+    "payment_system": "stub",
+    "available_systems": ["stub", "telegram_stars", "yookassa", "cryptobot"],
+    "currency_packages": {
+        "100": {
+            "name": "100 монет",
+            "amount": 100,
+            "price_rub": 50,
+            "price_stars": 50
+        },
+        "200": {
+            "name": "200 монет", 
+            "amount": 200,
+            "price_rub": 90,
+            "price_stars": 90
+        },
+        "300": {
+            "name": "300 монет",
+            "amount": 300,
+            "price_rub": 130,
+            "price_stars": 130
+        },
+        "400": {
+            "name": "400 монет",
+            "amount": 400,
+            "price_rub": 160,
+            "price_stars": 160
+        },
+        "500": {
+            "name": "500 монет",
+            "amount": 500,
+            "price_rub": 200,
+            "price_stars": 200
+        }
+    },
+    "custom_purchase": {
+        "enabled": true,
+        "min_amount": 1,
+        "max_amount": 10000,
+        "price_per_coin": 0.5
+    }
+}
