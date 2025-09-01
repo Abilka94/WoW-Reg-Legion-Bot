@@ -31,10 +31,16 @@ DEFAULT_CONFIG = {
         "admin_check_db": True,
         "admin_download_log": True,
         "admin_delete_account": True,
-        "admin_reload_config": True
+        "admin_reload_config": True,
+        "currency_shop": False
     },
     "settings": {
         "max_accounts_per_user": 3
+    },
+    "currency_shop": {
+        "enabled": False,
+        "balance_check": False,
+        "purchase": False
     }
 }
 
@@ -47,7 +53,10 @@ def load_config():
     try:
         if os.path.exists("config.json"):
             with open("config.json", encoding="utf-8") as f:
-                CONFIG = json.load(f)
+                loaded_config = json.load(f)
+            # Полностью заменяем CONFIG
+            CONFIG.clear()
+            CONFIG.update(loaded_config)
             logging.info("Конфигурация успешно загружена из config.json")
         else:
             logging.warning("Файл config.json не найден, используются настройки по умолчанию")
