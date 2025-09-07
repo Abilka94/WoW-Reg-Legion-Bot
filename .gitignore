@@ -125,6 +125,9 @@ tmp/
 .vscode/settings.json
 .idea/
 
+# Qoder IDE
+.qoder/rules/
+
 # Системные файлы Windows
 Thumbs.db
 Desktop.ini
