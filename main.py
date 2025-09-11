@@ -197,7 +197,7 @@ async def main():
     async def cb_my_account(callback: CallbackQuery, state: FSMContext):
         await state.clear()
         if not pool:
-            await callback.answer("База данных недоступна", show_alert=True)
+            await callback.answer(T["database_unavailable"], show_alert=True)
             return
             
         accounts = await get_account_info(pool, callback.from_user.id)
@@ -453,7 +453,7 @@ async def main():
             return
             
         if not pool:
-            await callback.answer("База данных недоступна", show_alert=True)
+            await callback.answer(T["database_unavailable"], show_alert=True)
             return
             
         try:
@@ -473,13 +473,13 @@ async def main():
             
         except Exception as e:
             logger.error(f"Ошибка при получении баланса: {e}")
-            await callback.answer("Ошибка при получении данных", show_alert=True)
+            await callback.answer(T["data_fetch_error"], show_alert=True)
 
     @dp.callback_query(F.data.startswith("buy_coins_"))
     async def cb_buy_coins_package(callback: CallbackQuery, state: FSMContext):
         await state.clear()
         if not pool:
-            await callback.answer("База данных недоступна", show_alert=True)
+            await callback.answer(T["database_unavailable"], show_alert=True)
             return
 
         # Получаем количество монет из callback_data
@@ -488,7 +488,7 @@ async def main():
         if package == "custom":
             # Проверяем, разрешен ли кастомный ввод
             if not CURRENCY_SHOP_CONFIG.get("custom_purchase", {}).get("enabled", False):
-                await callback.answer("Кастомные покупки отключены", show_alert=True)
+                await callback.answer(T["custom_purchases_disabled"], show_alert=True)
                 return
                 
             await state.set_state(BuyCoinsStates.entering_amount)
@@ -501,7 +501,7 @@ async def main():
         coins_amount = package_config.get("amount", 0)
         
         if coins_amount == 0:
-            await callback.answer("Неизвестный пакет", show_alert=True)
+            await callback.answer(T["unknown_package"], show_alert=True)
             return
         
         # Получаем аккаунты пользователя
@@ -521,7 +521,7 @@ async def main():
             
         except Exception as e:
             logger.error(f"Ошибка при получении аккаунтов: {e}")
-            await callback.answer("Ошибка при получении данных", show_alert=True)
+            await callback.answer(T["data_fetch_error"], show_alert=True)
 
     @dp.callback_query(F.data.startswith("coins_select_"), BuyCoinsStates.selecting_account)
     async def cb_coins_select_account(callback: CallbackQuery, state: FSMContext):
@@ -530,7 +530,7 @@ async def main():
         coins_amount = data.get("coins_amount", 0)
         
         if coins_amount == 0:
-            await callback.answer("Ошибка: количество монет не определено", show_alert=True)
+            await callback.answer(T["coins_amount_error"], show_alert=True)
             return
         
         try:
@@ -642,7 +642,7 @@ async def main():
             if success:
                 await message.answer(T["admin_delete_success"].format(email=email), reply_markup=kb_admin())
             else:
-                await message.answer(T["admin_delete_error"].format(error="Аккаунт не найден"), reply_markup=kb_admin())
+                await message.answer(T["admin_delete_error"].format(error=T["account_not_found_error"]), reply_markup=kb_admin())
         except Exception as e:
             logger.error(f"Ошибка админ удаления: {e}")
             await message.answer(T["admin_delete_error"].format(error=str(e)), reply_markup=kb_admin())
