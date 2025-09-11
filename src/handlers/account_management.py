@@ -1,5 +1,5 @@
-"""
-Обработчики для управления аккаунтами
+﻿"""
+РћР±СЂР°Р±РѕС‚С‡РёРєРё РґР»СЏ СѓРїСЂР°РІР»РµРЅРёСЏ Р°РєРєР°СѓРЅС‚Р°РјРё
 """
 import logging
 from aiogram import F
@@ -18,7 +18,7 @@ from ..database.user_operations import reset_password, change_password, get_acco
 logger = logging.getLogger("bot")
 
 def register_account_handlers(dp, pool, bot_instance):
-    """Регистрирует обработчики управления аккаунтами"""
+    """Р РµРіРёСЃС‚СЂРёСЂСѓРµС‚ РѕР±СЂР°Р±РѕС‚С‡РёРєРё СѓРїСЂР°РІР»РµРЅРёСЏ Р°РєРєР°СѓРЅС‚Р°РјРё"""
     
     if CONFIG["features"]["password_reset"]:
         @dp.callback_query(F.data == "forgot")
@@ -28,10 +28,10 @@ def register_account_handlers(dp, pool, bot_instance):
                 return
             
             await state.clear()
-            await delete_all_bot_messages(c.from_user.id)
+            await delete_all_bot_messages(c.from_user.id, bot_instance)
             await state.set_state(ForgotPasswordStates.email)
-            from ..main import bot
-            msg = await bot.send_message(c.from_user.id, "🔄 Введите e-mail для сброса пароля:", reply_markup=kb_back())
+            bot = bot_instance
+            msg = await bot.send_message(c.from_user.id, T["forgot_email_prompt"], reply_markup=kb_back())
             record_message(c.from_user.id, msg, "command")
             await c.answer()
 
@@ -52,19 +52,19 @@ def register_account_handlers(dp, pool, bot_instance):
                 await delete_user_message(m)
                 return
             
-            # Проверяем, принадлежит ли email этому пользователю
+            # РџСЂРѕРІРµСЂСЏРµРј, РїСЂРёРЅР°РґР»РµР¶РёС‚ Р»Рё email СЌС‚РѕРјСѓ РїРѕР»СЊР·РѕРІР°С‚РµР»СЋ
             async with pool.acquire() as conn:
                 async with conn.cursor() as cur:
                     await cur.execute("SELECT 1 FROM users WHERE telegram_id=%s AND email=%s", (m.from_user.id, mail))
                     if not await cur.fetchone():
-                        msg = await m.answer("❌ Этот e-mail не привязан к вашему Telegram.", reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="OK", callback_data="error_ok")]]))
+                        msg = await m.answer(T["email_not_linked"], reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="OK", callback_data="error_ok")]]))
                         record_message(m.from_user.id, msg, "error")
                         await delete_user_message(m)
                         return
             
             tmp = await reset_password(pool, mail)
             await state.clear()
-            await delete_all_bot_messages(m.from_user.id)
+            await delete_all_bot_messages(m.from_user.id, bot_instance)
             
             if tmp is None:
                 msg = await m.answer(T["reset_err_not_found"], reply_markup=kb_main())
@@ -82,18 +82,18 @@ def register_account_handlers(dp, pool, bot_instance):
                 return
             
             await state.clear()
-            await delete_all_bot_messages(c.from_user.id)
+            await delete_all_bot_messages(c.from_user.id, bot_instance)
             accounts = await get_account_info(pool, c.from_user.id)
             
             if not accounts:
-                from ..main import bot
+                bot = bot_instance
                 msg = await bot.send_message(c.from_user.id, T["account_no_account"], reply_markup=kb_back())
                 record_message(c.from_user.id, msg, "command")
                 await c.answer()
                 return
             
             text = T["select_account_prompt"]
-            from ..main import bot
+            bot = bot_instance
             msg = await bot.send_message(c.from_user.id, text, reply_markup=kb_account_list(accounts))
             record_message(c.from_user.id, msg, "command")
             await c.answer()
@@ -109,7 +109,7 @@ def register_account_handlers(dp, pool, bot_instance):
             accounts = await get_account_info(pool, c.from_user.id)
             
             if not accounts:
-                from ..main import bot
+                bot = bot_instance
                 msg = await bot.send_message(c.from_user.id, T["account_no_account"], reply_markup=kb_back())
                 record_message(c.from_user.id, msg, "command")
                 await c.answer()
@@ -117,7 +117,7 @@ def register_account_handlers(dp, pool, bot_instance):
             
             selected = next((acc for acc in accounts if acc[0] == email), None)
             if not selected:
-                from ..main import bot
+                bot = bot_instance
                 msg = await bot.send_message(c.from_user.id, T["no_access"], reply_markup=kb_back())
                 record_message(c.from_user.id, msg, "command")
                 await c.answer()
@@ -133,7 +133,7 @@ def register_account_handlers(dp, pool, bot_instance):
                 if "message is not modified" in str(e).lower():
                     await c.answer()
                     return
-                from ..main import bot
+                bot = bot_instance
                 msg = await bot.send_message(c.from_user.id, text, reply_markup=kb_account_list(accounts, selected_email=email))
             
             record_message(c.from_user.id, msg, "command")
@@ -146,17 +146,17 @@ def register_account_handlers(dp, pool, bot_instance):
                 return
             
             await state.clear()
-            await delete_all_bot_messages(c.from_user.id)
+            await delete_all_bot_messages(c.from_user.id, bot_instance)
             accounts = await get_account_info(pool, c.from_user.id)
             
             if not accounts:
-                from ..main import bot
+                bot = bot_instance
                 msg = await bot.send_message(c.from_user.id, T["account_no_account"], reply_markup=kb_back())
                 record_message(c.from_user.id, msg, "command")
                 await c.answer()
                 return
             
-            # Находим выбранный email из текста сообщения
+            # РќР°С…РѕРґРёРј РІС‹Р±СЂР°РЅРЅС‹Р№ email РёР· С‚РµРєСЃС‚Р° СЃРѕРѕР±С‰РµРЅРёСЏ
             sel = None
             for email, *_ in accounts:
                 if email in c.message.text:
@@ -164,7 +164,7 @@ def register_account_handlers(dp, pool, bot_instance):
                     break
             
             if not sel:
-                from ..main import bot
+                bot = bot_instance
                 msg = await bot.send_message(c.from_user.id, T["select_account_prompt"], reply_markup=kb_account_list(accounts))
                 record_message(c.from_user.id, msg, "command")
                 await c.answer()
@@ -172,7 +172,7 @@ def register_account_handlers(dp, pool, bot_instance):
             
             await state.set_state(ChangePasswordStates.new_password)
             await state.update_data(email=sel)
-            from ..main import bot
+            bot = bot_instance
             msg = await bot.send_message(c.from_user.id, T["change_password_prompt"], reply_markup=kb_back())
             record_message(c.from_user.id, msg, "command")
             await c.answer()
@@ -198,7 +198,7 @@ def register_account_handlers(dp, pool, bot_instance):
             
             await change_password(pool, email, new_password)
             await state.clear()
-            await delete_all_bot_messages(m.from_user.id)
+            await delete_all_bot_messages(m.from_user.id, bot_instance)
             msg = await m.answer(T["change_password_success"], reply_markup=kb_main())
             record_message(m.from_user.id, msg, "command")
             await delete_user_message(m)
@@ -211,10 +211,10 @@ def register_account_handlers(dp, pool, bot_instance):
             
             email = c.data.replace("delete_account_", "")
             success = await delete_account(pool, c.from_user.id, email)
-            await delete_all_bot_messages(c.from_user.id)
+            await delete_all_bot_messages(c.from_user.id, bot_instance)
             
             if not success:
-                from ..main import bot
+                bot = bot_instance
                 msg = await bot.send_message(c.from_user.id, T["delete_account_error"], reply_markup=kb_back())
                 record_message(c.from_user.id, msg, "command")
                 await c.answer()
@@ -222,14 +222,16 @@ def register_account_handlers(dp, pool, bot_instance):
             
             accounts = await get_account_info(pool, c.from_user.id)
             if not accounts:
-                from ..main import bot
+                bot = bot_instance
                 msg = await bot.send_message(c.from_user.id, T["account_no_account"], reply_markup=kb_back())
                 record_message(c.from_user.id, msg, "command")
                 await c.answer()
                 return
             
             text = T["delete_account_success"] + "\n\n" + T["select_account_prompt"]
-            from ..main import bot
+            bot = bot_instance
             msg = await bot.send_message(c.from_user.id, text, reply_markup=kb_account_list(accounts))
             record_message(c.from_user.id, msg, "command")
             await c.answer()
+
+

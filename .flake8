@@ -1,0 +1,123 @@
+[flake8]
+max-line-length = 100
+exclude = 
+    .git,
+    __pycache__,
+    .pytest_cache,
+    .coverage,
+    htmlcov,
+    *.egg-info,
+    build,
+    dist,
+    .venv,
+    venv,
+    env
+ignore = 
+    E203,  # whitespace before ':'
+    E501,  # line too long (handled by black)
+    W503,  # line break before binary operator
+    F401,  # module imported but unused (handled by isort)
+    E722,  # do not use bare except (we'll handle this manually)
+per-file-ignores =
+    __init__.py:F401
+    tests/*:D,S101,S603,S607
+max-complexity = 12
+select = E,W,F,C,N
+doctests = True
+
+[mypy]
+python_version = 3.11
+warn_return_any = True
+warn_unused_configs = True
+warn_redundant_casts = True
+warn_unused_ignores = True
+disallow_any_generics = True
+check_untyped_defs = True
+no_implicit_reexport = True
+disallow_untyped_defs = False
+ignore_missing_imports = True
+
+# Per module options
+[mypy-tests.*]
+disallow_untyped_defs = False
+ignore_errors = True
+
+[mypy-src.database.*]
+disallow_untyped_defs = True
+
+[mypy-src.utils.*]
+disallow_untyped_defs = True
+
+[pylint]
+max-line-length = 100
+disable = 
+    C0114,  # missing-module-docstring
+    C0115,  # missing-class-docstring  
+    C0116,  # missing-function-docstring
+    R0903,  # too-few-public-methods
+    R0913,  # too-many-arguments
+    W0212,  # protected-access (for tests)
+    C0103,  # invalid-name
+    R0801,  # duplicate-code
+
+# Security rules
+load-plugins = pylint.extensions.docparams
+
+[bandit]
+# B101: assert_used - OK in tests
+# B601: paramiko_calls - not used
+# B602: subprocess_popen_with_shell_equals_true - not used
+skips = B101,B601,B602
+exclude_dirs = tests,test_*.py
+
+[bandit.blacklist_calls]
+# Custom security rules
+bad_name_sets = [
+    {
+        names = ["eval", "exec", "compile"],
+        message = "Use of eval/exec/compile can be dangerous"
+    },
+    {
+        names = ["pickle.loads", "pickle.load", "pickle.Unpickler"],
+        message = "Pickle can execute arbitrary code"
+    },
+    {
+        names = ["yaml.load", "yaml.unsafe_load"],
+        message = "Use yaml.safe_load instead"
+    }
+]
+
+[coverage:run]
+source = src/
+omit = 
+    */tests/*
+    */test_*.py
+    */__pycache__/*
+    */.*
+    */venv/*
+    */env/*
+branch = True
+parallel = True
+
+[coverage:report]
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    if self.debug:
+    if __name__ == .__main__.:
+    raise AssertionError
+    raise NotImplementedError
+    if TYPE_CHECKING:
+    @abstract
+precision = 2
+show_missing = True
+skip_covered = False
+fail_under = 85
+
+[coverage:html]
+directory = htmlcov
+title = WoW Registration Bot Coverage Report
+show_contexts = True
+
+[coverage:xml]
+output = coverage.xml

@@ -36,11 +36,13 @@ def register_message_handlers(dp, pool, bot_instance):
         
         # Игнорируем команды (они обрабатываются отдельно)
         if not m.text.startswith("/"):
-            msg = await m.answer("❓ Используйте меню или /start", reply_markup=kb_main())
+            from ..config.translations import TRANSLATIONS as T
+            msg = await m.answer(T["use_menu_or_start"], reply_markup=kb_main())
             record_message(m.from_user.id, msg, "command")
 
     @dp.message()
     async def unknown(m: Message):
         """Обработчик неизвестных сообщений"""
-        msg = await m.answer("❓ Используйте меню или /start")
+        from ..config.translations import TRANSLATIONS as T
+        msg = await m.answer(T["use_menu_or_start"])
         record_message(m.from_user.id, msg, "command")

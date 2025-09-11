@@ -1,0 +1,48 @@
+# Testing and Code Quality Dependencies
+pytest>=7.4.0
+pytest-asyncio>=0.21.1
+pytest-cov>=4.1.0
+pytest-mock>=3.11.1
+pytest-html>=3.2.0
+pytest-xdist>=3.3.1
+coverage>=7.3.0
+hypothesis>=6.82.0
+
+# Code Quality Tools
+pylint>=2.17.5
+flake8>=6.0.0
+mypy>=1.5.1
+black>=23.7.0
+isort>=5.12.0
+
+# Security Analysis
+bandit>=1.7.5
+safety>=2.3.5
+semgrep>=1.38.0
+
+# Performance Testing
+memory-profiler>=0.61.0
+py-spy>=0.3.14
+locust>=2.16.1
+
+# Mocking and Test Data
+factory-boy>=3.3.0
+faker>=19.3.1
+responses>=0.23.3
+
+# Additional Testing Utilities
+freezegun>=1.2.2
+pytest-timeout>=2.1.0
+pytest-benchmark>=4.0.0
+
+# Database Testing
+aiosqlite>=0.19.0  # For in-memory testing
+pytest-postgresql>=5.0.0
+
+# Async Testing Enhancements
+asynctest>=0.13.0
+aiounittest>=1.4.2
+
+# Code Coverage Extensions
+diff-cover>=7.7.0
+coverage-badge>=1.1.0

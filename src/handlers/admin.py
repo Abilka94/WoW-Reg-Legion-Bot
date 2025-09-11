@@ -1,5 +1,5 @@
-"""
-Обработчики для административных функций
+﻿"""
+РћР±СЂР°Р±РѕС‚С‡РёРєРё РґР»СЏ Р°РґРјРёРЅРёСЃС‚СЂР°С‚РёРІРЅС‹С… С„СѓРЅРєС†РёР№
 """
 import logging
 import os
@@ -19,7 +19,7 @@ from ..database.user_operations import admin_delete_account
 logger = logging.getLogger("bot")
 
 def register_admin_handlers(dp, pool, bot_instance):
-    """Регистрирует обработчики административных функций"""
+    """Р РµРіРёСЃС‚СЂРёСЂСѓРµС‚ РѕР±СЂР°Р±РѕС‚С‡РёРєРё Р°РґРјРёРЅРёСЃС‚СЂР°С‚РёРІРЅС‹С… С„СѓРЅРєС†РёР№"""
     
     if CONFIG["features"]["admin_broadcast"]:
         @dp.callback_query(F.data == "admin_broadcast")
@@ -29,18 +29,18 @@ def register_admin_handlers(dp, pool, bot_instance):
                 return
             
             await state.clear()
-            await delete_all_bot_messages(c.from_user.id)
+            await delete_all_bot_messages(c.from_user.id, bot_instance)
             
             if c.from_user.id != ADMIN_ID:
-                from ..main import bot
+                bot = bot_instance
                 msg = await bot.send_message(c.from_user.id, T["no_access"], reply_markup=kb_back())
                 record_message(c.from_user.id, msg, "command")
                 await c.answer()
                 return
             
             await state.set_state(AdminStates.broadcast_text)
-            from ..main import bot
-            msg = await bot.send_message(c.from_user.id, "Введите текст рассылки:", reply_markup=kb_admin_back())
+            bot = bot_instance
+            msg = await bot.send_message(c.from_user.id, T["admin_broadcast_prompt"], reply_markup=kb_admin_back())
             record_message(c.from_user.id, msg, "command")
             await c.answer()
 
@@ -54,14 +54,14 @@ def register_admin_handlers(dp, pool, bot_instance):
             
             if m.text.strip() in (T["cancel"], T["admin_back"]):
                 await state.clear()
-                await delete_all_bot_messages(m.from_user.id)
+                await delete_all_bot_messages(m.from_user.id, bot_instance)
                 msg = await m.answer(T["admin_panel"], reply_markup=kb_admin())
                 record_message(m.from_user.id, msg, "command")
                 await delete_user_message(m)
                 return
             
             await state.clear()
-            await delete_all_bot_messages(m.from_user.id)
+            await delete_all_bot_messages(m.from_user.id, bot_instance)
             
             try:
                 async with pool.acquire() as conn:
@@ -70,18 +70,18 @@ def register_admin_handlers(dp, pool, bot_instance):
                         users = await cur.fetchall()
                 
                 ok = fail = 0
-                from ..main import bot
+                bot = bot_instance
                 for (uid,) in users:
                     try:
                         await bot.send_message(uid, m.text)
                         ok += 1
                     except Exception as e:
-                        logger.warning(f"Не удалось отправить сообщение пользователю {uid}: {e}")
+                        logger.warning(f"Failed to send broadcast to user {uid}: {e}")
                         fail += 1
                 
-                txt = f"✅ Успех: {ok} | ❌ Ошибок: {fail}"
+                txt = f"✅ Sent: {ok} | ❌ Failed: {fail}"
             except Exception as e:
-                logger.error(f"Ошибка при выполнении рассылки: {e}")
+                logger.error(f"Broadcast error: {e}")
                 txt = f"❌ {e}"
             
             msg = await m.answer(txt, reply_markup=kb_admin_back())
@@ -96,10 +96,10 @@ def register_admin_handlers(dp, pool, bot_instance):
                 return
             
             await state.clear()
-            await delete_all_bot_messages(c.from_user.id)
+            await delete_all_bot_messages(c.from_user.id, bot_instance)
             
             if c.from_user.id != ADMIN_ID:
-                from ..main import bot
+                bot = bot_instance
                 msg = await bot.send_message(c.from_user.id, T["no_access"], reply_markup=kb_back())
                 record_message(c.from_user.id, msg, "command")
                 await c.answer()
@@ -111,11 +111,11 @@ def register_admin_handlers(dp, pool, bot_instance):
                 txt = T["db_ok"]
             except Exception as e:
                 txt = f"❌ {e}"
-                from ..main import bot
+                bot = bot_instance
                 await notify_admin(bot, str(e))
-                logger.error(f"Ошибка проверки базы данных: {e}")
+                logger.error(f"Database check error: {e}")
             
-            from ..main import bot
+            bot = bot_instance
             msg = await bot.send_message(c.from_user.id, txt, reply_markup=kb_admin_back())
             record_message(c.from_user.id, msg, "command")
             await c.answer()
@@ -128,10 +128,10 @@ def register_admin_handlers(dp, pool, bot_instance):
                 return
             
             await state.clear()
-            await delete_all_bot_messages(c.from_user.id)
+            await delete_all_bot_messages(c.from_user.id, bot_instance)
             
             if c.from_user.id != ADMIN_ID:
-                from ..main import bot
+                bot = bot_instance
                 msg = await bot.send_message(c.from_user.id, T["no_access"], reply_markup=kb_back())
                 record_message(c.from_user.id, msg, "command")
                 await c.answer()
@@ -144,8 +144,8 @@ def register_admin_handlers(dp, pool, bot_instance):
                 msg = await c.message.answer_document(FSInputFile("bot.log"), reply_markup=kb_admin_back())
                 record_message(c.from_user.id, msg, "command")
             except Exception as e:
-                logger.error(f"Ошибка при скачивании лога: {e}")
-                from ..main import bot
+                logger.error(f"Error sending log file: {e}")
+                bot = bot_instance
                 msg = await bot.send_message(c.from_user.id, T["admin_delete_error"].format(error=str(e)), reply_markup=kb_admin_back())
                 record_message(c.from_user.id, msg, "command")
             
@@ -159,17 +159,17 @@ def register_admin_handlers(dp, pool, bot_instance):
                 return
             
             await state.clear()
-            await delete_all_bot_messages(c.from_user.id)
+            await delete_all_bot_messages(c.from_user.id, bot_instance)
             
             if c.from_user.id != ADMIN_ID:
-                from ..main import bot
+                bot = bot_instance
                 msg = await bot.send_message(c.from_user.id, T["no_access"], reply_markup=kb_back())
                 record_message(c.from_user.id, msg, "command")
                 await c.answer()
                 return
             
             await state.set_state(AdminStates.delete_account_input)
-            from ..main import bot
+            bot = bot_instance
             msg = await bot.send_message(c.from_user.id, T["admin_delete_prompt"], reply_markup=kb_admin_back())
             record_message(c.from_user.id, msg, "command")
             await c.answer()
@@ -178,7 +178,7 @@ def register_admin_handlers(dp, pool, bot_instance):
         async def step_admin_delete_account(m: Message, state: FSMContext):
             if m.text.strip() in (T["cancel"], T["admin_back"]):
                 await state.clear()
-                await delete_all_bot_messages(m.from_user.id)
+                await delete_all_bot_messages(m.from_user.id, bot_instance)
                 msg = await m.answer(T["admin_panel"], reply_markup=kb_admin())
                 record_message(m.from_user.id, msg, "command")
                 await delete_user_message(m)
@@ -188,21 +188,21 @@ def register_admin_handlers(dp, pool, bot_instance):
             
             try:
                 if not validate_email(email):
-                    raise ValueError("Некорректный e-mail")
+                    raise ValueError(T["err_mail"]) 
                 
                 success = await admin_delete_account(pool, email)
                 await state.clear()
-                await delete_all_bot_messages(m.from_user.id)
+                await delete_all_bot_messages(m.from_user.id, bot_instance)
                 
                 if success:
                     msg = await m.answer(T["admin_delete_success"].format(email=email), reply_markup=kb_admin_back())
                 else:
-                    msg = await m.answer(T["admin_delete_error"].format(error="Аккаунт не найден"), reply_markup=kb_admin_back())
+                    msg = await m.answer(T["admin_delete_error"].format(error=T["account_not_found_error"]), reply_markup=kb_admin_back())
             
             except Exception as e:
-                logger.error(f"Ошибка при удалении аккаунта админом: {e}")
+                logger.error(f"Admin delete account error: {e}")
                 await state.clear()
-                await delete_all_bot_messages(m.from_user.id)
+                await delete_all_bot_messages(m.from_user.id, bot_instance)
                 msg = await m.answer(T["admin_delete_error"].format(error=str(e)), reply_markup=kb_admin_back())
             
             record_message(m.from_user.id, msg, "command")
@@ -216,10 +216,10 @@ def register_admin_handlers(dp, pool, bot_instance):
                 return
             
             await state.clear()
-            await delete_all_bot_messages(c.from_user.id)
+            await delete_all_bot_messages(c.from_user.id, bot_instance)
             
             if c.from_user.id != ADMIN_ID:
-                from ..main import bot
+                bot = bot_instance
                 msg = await bot.send_message(c.from_user.id, T["no_access"], reply_markup=kb_back())
                 record_message(c.from_user.id, msg, "command")
                 await c.answer()
@@ -227,12 +227,12 @@ def register_admin_handlers(dp, pool, bot_instance):
             
             try:
                 from ..config.settings import reload_config
-                from ..main import bot
+                bot = bot_instance
                 await reload_config(bot)
                 msg = await bot.send_message(c.from_user.id, T["reload_config_success"], reply_markup=kb_admin())
             except Exception as e:
-                logger.error(f"Ошибка при перезагрузке конфигурации: {e}")
-                from ..main import bot
+                logger.error(f"Reload config error: {e}")
+                bot = bot_instance
                 msg = await bot.send_message(c.from_user.id, T["reload_config_error"].format(error=str(e)), reply_markup=kb_admin())
             
             record_message(c.from_user.id, msg, "command")
@@ -246,8 +246,9 @@ def register_admin_handlers(dp, pool, bot_instance):
                 return
             
             await state.clear()
-            await delete_all_bot_messages(c.from_user.id)
-            from ..main import bot
+            await delete_all_bot_messages(c.from_user.id, bot_instance)
+            bot = bot_instance
             msg = await bot.send_message(c.from_user.id, T["start"].format(version=BOT_VERSION), reply_markup=kb_main())
             record_message(c.from_user.id, msg, "command")
             await c.answer()
+
