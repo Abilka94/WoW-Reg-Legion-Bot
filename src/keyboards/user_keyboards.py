@@ -52,11 +52,12 @@ def kb_account_list(accounts, selected_email=None):
         buttons.append([InlineKeyboardButton(text=text, callback_data=f"select_account_{email}")])
 
     if selected_email and CONFIG["features"].get("account_management", False):
-        buttons.append([InlineKeyboardButton(text=T["change_password_prompt"], callback_data="change_password")])
+        buttons.append([InlineKeyboardButton(text=T["change_password_btn"], callback_data="change_password")])
         buttons.append([InlineKeyboardButton(text=T["delete_account_prompt"], callback_data=f"delete_account_{selected_email}")])
-
-    if CONFIG.get("features", {}).get("currency_shop", False) and CONFIG.get("currency_shop", {}).get("enabled", False):
-        buttons.append([InlineKeyboardButton(text=T["btn_buy_coins"], callback_data="coins_menu")])
+        
+        # Кнопка магазина валюты отображается ТОЛЬКО когда выбран конкретный аккаунт
+        if CONFIG.get("features", {}).get("currency_shop", False) and CONFIG.get("currency_shop", {}).get("enabled", False):
+            buttons.append([InlineKeyboardButton(text=T["btn_buy_coins"], callback_data="coins_menu")])
 
     buttons.append([InlineKeyboardButton(text=T["to_main"], callback_data="back_to_main")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)

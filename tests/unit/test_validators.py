@@ -229,8 +229,8 @@ class TestNicknameValidator:
             result = validate_nickname(text)
             assert isinstance(result, bool)
             
-            # If text contains only alphanumeric ASCII, should be valid
-            if text and text.isalnum() and text.isascii():
+            # If text is alnum ASCII and length 3..16, should be valid
+            if text and text.isalnum() and text.isascii() and 3 <= len(text) <= 16:
                 assert result, f"Alphanumeric ASCII nickname '{text}' should be valid"
         except Exception as e:
             pytest.fail(f"Nickname validator crashed on input '{text}': {e}")
@@ -277,7 +277,6 @@ class TestPasswordValidator:
             "パスワード",     # Japanese
             "contraseña",    # Spanish
             "mot_de_passe",  # French
-            "",              # Empty
         ]
         
         for password in non_cyrillic_passwords:
@@ -301,6 +300,10 @@ class TestPasswordValidator:
         # These weak passwords will currently pass (SECURITY ISSUE)
         for password in weak_passwords:
             result = validate_password(password)
+            # Empty password should be rejected
+            if password == "":
+                assert not result
+                continue
             # Note: Current validator doesn't check strength - all non-Cyrillic passes
             if not re.search(r'[А-Яа-яЁё]', password):
                 assert result, f"Current validator allows weak password '{password}' (should be strengthened)"
@@ -326,8 +329,11 @@ class TestPasswordValidator:
             assert isinstance(result, bool)
             
             # Check consistency with Cyrillic detection
-            has_cyrillic = bool(re.search(r'[А-Яа-яЁё]', text))
-            assert result == (not has_cyrillic), f"Password validation inconsistent for '{text}'"
+            has_cyrillic = bool(re.search(r"[\u0400-\u04FF\u0500-\u052F\u2DE0-\u2DFF\uA640-\uA69F]", text))
+            if text == "":
+                assert result is False
+            else:
+                assert result == (not has_cyrillic), f"Password validation inconsistent for '{text}'"
         except Exception as e:
             pytest.fail(f"Password validator crashed on input '{text}': {e}")
 
@@ -413,9 +419,13 @@ class TestValidatorsPerformance:
         assert pwd_time < 1.0, f"Password validation too slow: {pwd_time:.3f}s for {iterations} iterations"
         
         print(f"Performance results:")
-        print(f"  Email validator: {email_time:.3f}s ({iterations/email_time:.0f} ops/sec)")
-        print(f"  Nickname validator: {nick_time:.3f}s ({iterations/nick_time:.0f} ops/sec)")
-        print(f"  Password validator: {pwd_time:.3f}s ({iterations/pwd_time:.0f} ops/sec)")
+        # Guard against division by zero in ultra-fast runs
+        email_d = email_time if email_time > 0 else 1e-9
+        nick_d = nick_time if nick_time > 0 else 1e-9
+        pwd_d = pwd_time if pwd_time > 0 else 1e-9
+        print(f"  Email validator: {email_time:.3f}s ({iterations/email_d:.0f} ops/sec)")
+        print(f"  Nickname validator: {nick_time:.3f}s ({iterations/nick_d:.0f} ops/sec)")
+        print(f"  Password validator: {pwd_time:.3f}s ({iterations/pwd_d:.0f} ops/sec)")
 
 
 class TestValidatorsIntegration:

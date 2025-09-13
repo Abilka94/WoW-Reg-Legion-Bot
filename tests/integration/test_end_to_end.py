@@ -2,15 +2,17 @@
 End-to-end integration tests for complete user workflows.
 """
 import pytest
+import pytest_asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.memory import MemoryStorage
+import src
 
 
 class TestEndToEndWorkflows:
     """End-to-end tests for complete user workflows."""
     
-    @pytest.fixture
+    @pytest_asyncio.fixture
     async def mock_state(self):
         """Create FSM state."""
         storage = MemoryStorage()
@@ -332,3 +334,4 @@ class TestEndToEndWorkflows:
             await mock_state.clear()
             current_state = await mock_state.get_state()
             assert current_state is None
+

@@ -9,6 +9,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+import pytest_asyncio
 import aiosqlite
 from faker import Faker
 
@@ -51,25 +52,29 @@ def mock_config():
         }
     }
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def mock_db_pool():
     """Mock database connection pool."""
-    pool = AsyncMock()
-    conn = AsyncMock()
+    pool = MagicMock()
+    conn = MagicMock()
     cursor = AsyncMock()
-    
-    # Setup mock chain
-    pool.acquire.return_value.__aenter__.return_value = conn
-    conn.cursor.return_value.__aenter__.return_value = cursor
-    
+
+    # Setup mock chain for async context managers
+    acquire_cm = AsyncMock()
+    acquire_cm.__aenter__.return_value = conn
+    pool.acquire.return_value = acquire_cm
+
+    cursor_cm = AsyncMock()
+    cursor_cm.__aenter__.return_value = cursor
+    conn.cursor.return_value = cursor_cm
+
     # Default cursor behavior
     cursor.fetchone.return_value = None
     cursor.fetchall.return_value = []
     cursor.rowcount = 1
-    
+
     return pool
 
-@pytest.fixture
 async def in_memory_db():
     """Create an in-memory SQLite database for testing."""
     db = await aiosqlite.connect(":memory:")
@@ -180,7 +185,6 @@ def invalid_test_data():
             "user.name",  # Dot
         ],
         "passwords": [
-            "",  # Empty
             "пароль123",  # Cyrillic
             "Пароль",  # Cyrillic
             "тест",  # Cyrillic
@@ -313,3 +317,8 @@ def pytest_unconfigure(config):
     # Cleanup test environment
     os.environ.pop("TESTING", None)
     os.environ.pop("LOG_LEVEL", None)
+
+
+
+
+

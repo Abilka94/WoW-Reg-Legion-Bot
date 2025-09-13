@@ -20,6 +20,7 @@ from src.handlers.registration import register_registration_handlers
 from src.handlers.account_management import register_account_handlers
 from src.handlers.admin import register_admin_handlers
 from src.handlers.messages import register_message_handlers
+from src.handlers.currency_shop import register_currency_shop_handlers
 
 
 def setup_logging():
@@ -73,6 +74,7 @@ async def main():
     register_registration_handlers(dp, pool, bot)
     register_account_handlers(dp, pool, bot)
     register_admin_handlers(dp, pool, bot)
+    register_currency_shop_handlers(dp, pool, bot)
     register_message_handlers(dp, pool, bot)
 
     logger.info("Polling...")

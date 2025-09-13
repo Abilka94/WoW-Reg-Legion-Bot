@@ -294,9 +294,11 @@ class TestErrorHandlingIntegration:
     @pytest.mark.asyncio
     async def test_database_connection_error(self, mock_bot):
         """Test handling of database connection errors."""
-        # Mock database that raises connection error
-        mock_db_pool = AsyncMock()
-        mock_db_pool.acquire.side_effect = Exception("Database connection failed")
+        # Mock database that raises connection error on acquire() context enter
+        mock_db_pool = MagicMock()
+        acquire_cm = AsyncMock()
+        acquire_cm.__aenter__.side_effect = Exception("Database connection failed")
+        mock_db_pool.acquire.return_value = acquire_cm
         
         with patch('src.handlers.admin.delete_all_bot_messages'), \
              patch('src.handlers.admin.record_message'), \

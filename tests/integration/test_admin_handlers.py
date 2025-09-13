@@ -2,6 +2,7 @@
 Integration tests for admin handlers.
 """
 import pytest
+import pytest_asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -11,7 +12,7 @@ from src.states.user_states import AdminStates
 class TestAdminHandlersIntegration:
     """Integration tests for admin handlers."""
     
-    @pytest.fixture
+    @pytest_asyncio.fixture
     async def mock_state(self):
         """Create FSM state."""
         storage = MemoryStorage()
@@ -94,9 +95,11 @@ class TestAdminHandlersIntegration:
     @pytest.mark.asyncio
     async def test_admin_database_check_failure(self, mock_bot, mock_admin_config):
         """Test admin database check with connection failure."""
-        # Mock failing database
-        mock_db_pool = AsyncMock()
-        mock_db_pool.acquire.side_effect = Exception("Connection timeout")
+        # Mock failing database (acquire() async CM raises on __aenter__)
+        mock_db_pool = MagicMock()
+        acquire_cm = AsyncMock()
+        acquire_cm.__aenter__.side_effect = Exception("Connection timeout")
+        mock_db_pool.acquire.return_value = acquire_cm
         
         with patch('src.handlers.admin.CONFIG', mock_admin_config), \
              patch('src.handlers.admin.ADMIN_ID', 123456789), \

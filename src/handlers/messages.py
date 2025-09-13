@@ -7,7 +7,7 @@ from aiogram.types import Message
 from aiogram.enums import ChatType
 from aiogram.fsm.context import FSMContext
 
-from ..states.user_states import RegistrationStates, ForgotPasswordStates, ChangePasswordStates, AdminStates
+from ..states.user_states import RegistrationStates, ForgotPasswordStates, ChangePasswordStates, AdminStates, CurrencyShopStates
 from ..keyboards.user_keyboards import kb_main
 from ..utils.notifications import record_message, delete_user_message
 
@@ -28,7 +28,8 @@ def register_message_handlers(dp, pool, bot_instance):
             ForgotPasswordStates.email.state,
             ChangePasswordStates.new_password.state,
             AdminStates.broadcast_text.state,
-            AdminStates.delete_account_input.state
+            AdminStates.delete_account_input.state,
+            CurrencyShopStates.custom_amount.state
         ):
             return
         
