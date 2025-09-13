@@ -67,7 +67,6 @@ def kb_coins_menu():
     """Клавиатура меню валюты"""
     buttons = [
         [InlineKeyboardButton(text=T["btn_buy_coins"], callback_data="buy_coins")],
-        [InlineKeyboardButton(text=T["btn_check_balance"], callback_data="check_balance")],
         [InlineKeyboardButton(text=T["to_main"], callback_data="back_to_main")],
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)

@@ -36,11 +36,25 @@ def register_currency_shop_handlers(dp, pool, bot_instance):
         await state.clear()
         await delete_all_bot_messages(c.from_user.id, bot_instance)
         
+        # Получаем аккаунты пользователя с балансом
+        accounts = await get_user_accounts_with_coins(pool, c.from_user.id)
+        
+        if not accounts:
+            accounts_info = T["no_registered_accounts"]
+        else:
+            accounts_info = "\n".join([
+                f"📧 {email} - 💰 {coins} монет"
+                for email, username, is_temp, temp_password, coins in accounts
+            ])
+        
+        # Формируем текст с балансом
+        text = T["coins_menu_with_balance"].format(accounts_info=accounts_info)
+        
         try:
-            msg = await c.message.edit_text(T["coins_menu"], reply_markup=kb_coins_menu())
+            msg = await c.message.edit_text(text, reply_markup=kb_coins_menu())
         except TelegramBadRequest:
             bot = bot_instance
-            msg = await bot.send_message(c.from_user.id, T["coins_menu"], reply_markup=kb_coins_menu())
+            msg = await bot.send_message(c.from_user.id, text, reply_markup=kb_coins_menu())
         
         record_message(c.from_user.id, msg, "command")
         await c.answer()
@@ -59,40 +73,6 @@ def register_currency_shop_handlers(dp, pool, bot_instance):
         except TelegramBadRequest:
             bot = bot_instance
             msg = await bot.send_message(c.from_user.id, T["buy_coins"], reply_markup=kb_coins_packages())
-        
-        record_message(c.from_user.id, msg, "command")
-        await c.answer()
-
-    @dp.callback_query(F.data == "check_balance")
-    async def cb_check_balance(c: CallbackQuery, state: FSMContext):
-        if not CONFIG["features"].get("currency_shop", False) or not CONFIG.get("currency_shop", {}).get("balance_check", False):
-            await c.answer(T["feature_disabled"], show_alert=True)
-            return
-        
-        await state.clear()
-        await delete_all_bot_messages(c.from_user.id, bot_instance)
-        
-        accounts = await get_user_accounts_with_coins(pool, c.from_user.id)
-        
-        if not accounts:
-            bot = bot_instance
-            msg = await bot.send_message(c.from_user.id, T["no_accounts_for_coins"], reply_markup=kb_back())
-            record_message(c.from_user.id, msg, "command")
-            await c.answer()
-            return
-        
-        accounts_info = "\n".join([
-            f"📧 {email} - 💰 {coins} монет"
-            for email, username, is_temp, temp_password, coins in accounts
-        ])
-        
-        text = T["account_balance"].format(accounts_info=accounts_info)
-        
-        try:
-            msg = await c.message.edit_text(text, reply_markup=kb_back())
-        except TelegramBadRequest:
-            bot = bot_instance
-            msg = await bot.send_message(c.from_user.id, text, reply_markup=kb_back())
         
         record_message(c.from_user.id, msg, "command")
         await c.answer()
