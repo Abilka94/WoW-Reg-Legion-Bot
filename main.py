@@ -15,6 +15,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.redis import RedisStorage
 from aiogram.client.default import DefaultBotProperties
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, FSInputFile
+from aiogram.exceptions import TelegramBadRequest
 from logging.handlers import TimedRotatingFileHandler
 
 # Импорты модулей
@@ -483,11 +484,24 @@ async def main():
         
         await callback.answer("🔧 Функция в разработке", show_alert=True)
 
+    
+
     @dp.callback_query(F.data == "admin_back")
     async def cb_admin_back(callback: CallbackQuery, state: FSMContext):
         await state.clear()
-        await callback.message.edit_text(T["admin_panel"], reply_markup=kb_admin())
+        try:
+            if callback.message and callback.message.text:
+                await callback.message.edit_text(T["admin_panel"], reply_markup=kb_admin())
+            elif callback.message and callback.message.caption:
+                await callback.message.edit_caption(T["admin_panel"], reply_markup=kb_admin())
+            else:
+                raise TelegramBadRequest(method=None, message="no text to edit")
+        except TelegramBadRequest:
+            if callback.message:
+                await callback.message.delete()
+            await callback.message.answer(T["admin_panel"], reply_markup=kb_admin())
         await callback.answer()
+
 
     @dp.callback_query(F.data == "admin_main")
     async def cb_admin_main(callback: CallbackQuery, state: FSMContext):
