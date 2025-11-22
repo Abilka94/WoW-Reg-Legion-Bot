@@ -540,6 +540,8 @@ async def main():
                 pass
             if admin_menu_msgs.get(callback.from_user.id) == callback.message.message_id:
                 admin_menu_msgs.pop(callback.from_user.id, None)
+        if callback.message:
+            admin_menu_msgs[callback.from_user.id] = callback.message.message_id
         await render_admin_menu(callback.message.chat.id, callback.from_user.id)
         await callback.answer()
 
@@ -548,6 +550,8 @@ async def main():
     @dp.callback_query(F.data == "admin_main")
     async def cb_admin_main(callback: CallbackQuery, state: FSMContext):
         await state.clear()
+        if callback.message:
+            main_menu_msgs[callback.from_user.id] = callback.message.message_id
         await render_main_menu(callback.message.chat.id, callback.from_user.id)
         await callback.answer()
 
@@ -557,6 +561,10 @@ async def main():
         if callback.from_user.id != ADMIN_ID:
             await callback.answer(T["no_access"], show_alert=True)
             return
+        if callback.message:
+            admin_menu_msgs[callback.from_user.id] = callback.message.message_id
+        if callback.message:
+            admin_menu_msgs[callback.from_user.id] = callback.message.message_id
         await render_admin_menu(callback.message.chat.id, callback.from_user.id)
         await callback.answer()
 
