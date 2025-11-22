@@ -119,39 +119,8 @@ def register_admin_handlers(dp, pool, bot_instance):
             msg = await bot.send_message(c.from_user.id, txt, reply_markup=kb_admin_back())
             record_message(c.from_user.id, msg, "command")
             await c.answer()
-
-    if CONFIG["features"]["admin_download_log"]:
-        @dp.callback_query(F.data == "admin_download_log")
-        async def cb_admin_log(c: CallbackQuery, state: FSMContext):
-            if not CONFIG["features"]["admin_download_log"]:
-                await c.answer(T["feature_disabled"], show_alert=True)
-                return
-            
-            await state.clear()
-            await delete_all_bot_messages(c.from_user.id)
-            
-            if c.from_user.id != ADMIN_ID:
-                from ..main import bot
-                msg = await bot.send_message(c.from_user.id, T["no_access"], reply_markup=kb_back())
-                record_message(c.from_user.id, msg, "command")
-                await c.answer()
-                return
-            
-            try:
-                if not os.path.exists("bot.log"):
-                    raise FileNotFoundError("Log file not found")
-                
-                msg = await c.message.answer_document(FSInputFile("bot.log"), reply_markup=kb_admin_back())
-                record_message(c.from_user.id, msg, "command")
-            except Exception as e:
-                logger.error(f"Ошибка при скачивании лога: {e}")
-                from ..main import bot
-                msg = await bot.send_message(c.from_user.id, T["admin_delete_error"].format(error=str(e)), reply_markup=kb_admin_back())
-                record_message(c.from_user.id, msg, "command")
-            
-            await c.answer()
-
     if CONFIG["features"]["admin_delete_account"]:
+
         @dp.callback_query(F.data == "admin_delete_account")
         async def cb_admin_delete_account(c: CallbackQuery, state: FSMContext):
             if not CONFIG["features"]["admin_delete_account"]:

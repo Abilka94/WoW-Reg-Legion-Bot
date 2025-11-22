@@ -20,13 +20,9 @@ def kb_main(is_admin: bool = False):
     row = []
     if CONFIG["features"]["account_management"]:
         row.append(InlineKeyboardButton(text=T["menu_acc"], callback_data="my_account"))
-    if CONFIG["features"]["password_reset"]:
-        row.append(InlineKeyboardButton(text=T["menu_fgt"], callback_data="forgot"))
     if row:
         buttons.append(row)
     
-    if CONFIG["features"]["changelog"]:
-        buttons.append([InlineKeyboardButton(text=T["menu_chlog"], callback_data="show_changelog")])
     if is_admin:
         buttons.append([InlineKeyboardButton(text=T["menu_admin"], callback_data="open_admin_panel")])
 
@@ -56,6 +52,7 @@ def kb_account_list(accounts, selected_email=None):
     
     if selected_email:
         if CONFIG["features"]["account_management"]:
+            buttons.append([InlineKeyboardButton(text=T["menu_fgt"], callback_data=f"reset_password_{selected_email}")])
             buttons.append([InlineKeyboardButton(text=T["change_password_prompt"], callback_data="change_password")])
             buttons.append([InlineKeyboardButton(text=T["delete_account_prompt"], callback_data=f"delete_account_{selected_email}")])
     

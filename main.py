@@ -260,6 +260,28 @@ async def main():
         
         await callback.message.edit_text(text, reply_markup=kb_account_list(accounts, selected_email=email))
 
+    @dp.callback_query(F.data.startswith("reset_password_"))
+    async def cb_reset_password(callback: CallbackQuery, state: FSMContext):
+        await state.clear()
+        email = callback.data.replace("reset_password_", "")
+        accounts = await get_account_info(pool, callback.from_user.id)
+        if not accounts:
+            await callback.answer("? ??????? ?? ??????", show_alert=True)
+            return
+        if not any(acc[0] == email for acc in accounts):
+            await callback.answer("? ??????? ?? ??????", show_alert=True)
+            return
+        tmp = await reset_password(pool, email)
+        if tmp is None:
+            await callback.answer(T["reset_err_not_found"], show_alert=True)
+            return
+        text_msg = T["reset_success"].format(password=tmp)
+        try:
+            await callback.message.edit_text(text_msg, reply_markup=kb_account_list(accounts, selected_email=email))
+        except TelegramBadRequest:
+            await callback.message.answer(text_msg, reply_markup=kb_account_list(accounts, selected_email=email))
+        await callback.answer()
+
     @dp.callback_query(F.data == "change_password")
     async def cb_change_password(callback: CallbackQuery, state: FSMContext):
         accounts = await get_account_info(pool, callback.from_user.id)
@@ -478,23 +500,6 @@ async def main():
             logger.error(f"Ошибка админ удаления: {e}")
             await message.answer(T["admin_delete_error"].format(error=str(e)), reply_markup=kb_admin())
 
-    @dp.callback_query(F.data == "admin_download_log")
-    async def cb_admin_download_log(callback: CallbackQuery):
-        if callback.from_user.id != ADMIN_ID:
-            await callback.answer("❌ Нет доступа", show_alert=True)
-            return
-        
-        try:
-            if os.path.exists("bot.log"):
-                await callback.message.answer_document(FSInputFile("bot.log"))
-            else:
-                await callback.message.edit_text("❌ Лог файл не найден", reply_markup=kb_admin_back())
-        except Exception as e:
-            logger.error(f"Ошибка скачивания лога: {e}")
-            await callback.message.edit_text(f"❌ Ошибка: {e}", reply_markup=kb_admin_back())
-        
-
-    # Остальные админ функции
     @dp.callback_query(F.data.in_(["admin_broadcast", "admin_reload_config"]))
     async def cb_admin_other_functions(callback: CallbackQuery):
         if callback.from_user.id != ADMIN_ID:

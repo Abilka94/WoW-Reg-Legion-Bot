@@ -38,43 +38,8 @@ def register_command_handlers(dp, pool, bot_instance):
         msg = await m.answer(text, reply_markup=kb_back())
         record_message(m.from_user.id, msg, "command")
         await delete_user_message(m)
-
-    if CONFIG["features"]["changelog"]:
-        @dp.message(Command("changelog"))
-        async def cmd_changelog(m: Message):
-            if not CONFIG["features"]["changelog"]:
-                msg = await m.answer(T["feature_disabled"], reply_markup=kb_back())
-                record_message(m.from_user.id, msg, "command")
-                await delete_user_message(m)
-                return
-            
-            await delete_all_bot_messages(m.from_user.id, bot_instance)
-            # Загрузка changelog
-            try:
-                import json
-                import os
-                if os.path.exists("changelog.json"):
-                    with open("changelog.json", encoding="utf-8") as f:
-                        changelog = json.load(f)
-                    
-                    lines = []
-                    for ver in sorted(changelog.keys()):
-                        lines.append(f"<b>{ver}</b>:")
-                        for item in changelog[ver].get("ru", []):
-                            lines.append(f"• {item}")
-                        lines.append("")
-                    text = "\n".join(lines).strip()
-                else:
-                    text = "Changelog не найден"
-            except Exception as e:
-                logger.error(f"Ошибка загрузки changelog: {e}")
-                text = "Ошибка загрузки changelog"
-            
-            msg = await m.answer(text, reply_markup=kb_back())
-            record_message(m.from_user.id, msg, "command")
-            await delete_user_message(m)
-
     if CONFIG["features"]["admin_panel"]:
+
         @dp.message(Command("admin"))
         async def cmd_admin(m: Message, state: FSMContext):
             if not CONFIG["features"]["admin_panel"]:
@@ -179,42 +144,6 @@ def register_callback_handlers(dp, pool, bot_instance):
         msg = await bot_instance.send_message(c.from_user.id, txt or "—", reply_markup=kb_back())
         record_message(c.from_user.id, msg, "command")
         await c.answer()
-
-    if CONFIG["features"]["changelog"]:
-        @dp.callback_query(F.data == "show_changelog")
-        async def cb_show_changelog(c: CallbackQuery, state: FSMContext):
-            if not CONFIG["features"]["changelog"]:
-                await c.answer(T["feature_disabled"], show_alert=True)
-                return
-            
-            await state.clear()
-            await delete_all_bot_messages(c.from_user.id, bot_instance)
-            
-            # Загрузка changelog
-            try:
-                import json
-                import os
-                if os.path.exists("changelog.json"):
-                    with open("changelog.json", encoding="utf-8") as f:
-                        changelog = json.load(f)
-                    
-                    lines = []
-                    for ver in sorted(changelog.keys()):
-                        lines.append(f"<b>{ver}</b>:")
-                        for item in changelog[ver].get("ru", []):
-                            lines.append(f"• {item}")
-                        lines.append("")
-                    text = "\n".join(lines).strip()
-                else:
-                    text = "Changelog не найден"
-            except Exception as e:
-                logger.error(f"Ошибка загрузки changelog: {e}")
-                text = "Ошибка загрузки changelog"
-            
-            msg = await bot_instance.send_message(c.from_user.id, text, reply_markup=kb_back())
-            record_message(c.from_user.id, msg, "command")
-            await c.answer()
-
     @dp.callback_query(F.data == "error_ok")
     async def cb_error_ok(c: CallbackQuery):
         try:
