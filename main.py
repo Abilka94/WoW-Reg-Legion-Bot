@@ -58,6 +58,8 @@ def setup_logging():
 
 # Глобальные переменные для состояний
 user_wizard_msg = {}
+main_menu_msgs = {}
+admin_menu_msgs = {}
 
 def kb_account_list(accounts, selected_email=None):
     """Создаём клавиатуру для списка аккаунтов"""
@@ -107,6 +109,38 @@ async def main():
     # Создание диспетчера
     dp = Dispatcher(storage=storage) if storage else Dispatcher()
     
+    async def render_main_menu(chat_id: int, user_id: int):
+        kb = kb_main(is_admin=user_id == ADMIN_ID)
+        msg_id = main_menu_msgs.get(user_id)
+        if msg_id:
+            try:
+                msg = await bot.edit_message_text(T["start"], chat_id=chat_id, message_id=msg_id, reply_markup=kb)
+                main_menu_msgs[user_id] = msg.message_id
+                return msg
+            except TelegramBadRequest:
+                main_menu_msgs.pop(user_id, None)
+        msg = await bot.send_message(chat_id, T["start"], reply_markup=kb)
+        main_menu_msgs[user_id] = msg.message_id
+        return msg
+
+    async def render_admin_menu(chat_id: int, user_id: int):
+        msg_id = admin_menu_msgs.get(user_id)
+        if msg_id:
+            try:
+                msg = await bot.edit_message_text(T["admin_panel"], chat_id=chat_id, message_id=msg_id, reply_markup=kb_admin())
+                admin_menu_msgs[user_id] = msg.message_id
+                return msg
+            except TelegramBadRequest:
+                try:
+                    await bot.delete_message(chat_id, msg_id)
+                except Exception:
+                    pass
+                admin_menu_msgs.pop(user_id, None)
+        msg = await bot.send_message(chat_id, T["admin_panel"], reply_markup=kb_admin())
+        admin_menu_msgs[user_id] = msg.message_id
+        return msg
+
+    
     # Подключение middleware
     dp.message.middleware(RateLimit())
     dp.callback_query.middleware(RateLimit())
@@ -124,7 +158,7 @@ async def main():
     @dp.message(Command("start"))
     async def cmd_start(message: Message, state: FSMContext):
         await state.clear()
-        await message.answer(T["start"], reply_markup=kb_main())
+        await render_main_menu(message.chat.id, message.from_user.id)
         logger.info(f"Команда /start от пользователя {message.from_user.id}")
 
     @dp.message(Command("version"))
@@ -148,7 +182,7 @@ async def main():
             await message.answer(T["no_access"], reply_markup=kb_back())
             return
         
-        await message.answer(T["admin_panel"], reply_markup=kb_admin())
+        await render_admin_menu(message.chat.id, message.from_user.id)
         logger.info(f"Админ панель открыта пользователем {message.from_user.id}")
 
     # ==================== CALLBACK ОСНОВНЫЕ ====================
@@ -156,12 +190,9 @@ async def main():
     @dp.callback_query(F.data == "back_to_main")
     async def cb_back_main(callback: CallbackQuery, state: FSMContext):
         await state.clear()
-        try:
-            await callback.message.edit_text(T["start"], reply_markup=kb_main())
-        except:
-            await callback.message.answer(T["start"], reply_markup=kb_main())
+        await state.clear()
+        await render_main_menu(callback.message.chat.id, callback.from_user.id)
         await callback.answer()
-
     @dp.callback_query(F.data == "show_info")
     async def cb_show_info(callback: CallbackQuery, state: FSMContext):
         await state.clear()
@@ -265,7 +296,7 @@ async def main():
         
         if new_password in (T["to_main"], T["cancel"]):
             await state.clear()
-            await message.answer(T["start"], reply_markup=kb_main())
+            await message.answer(T["start"], reply_markup=kb_main(is_admin=message.from_user.id == ADMIN_ID))
             return
         
         if not validate_password(new_password):
@@ -275,7 +306,7 @@ async def main():
         try:
             await change_password(pool, email, new_password)
             await state.clear()
-            await message.answer(T["change_password_success"], reply_markup=kb_main())
+            await message.answer(T["change_password_success"], reply_markup=kb_main(is_admin=message.from_user.id == ADMIN_ID))
         except Exception as e:
             logger.error(f"Ошибка смены пароля: {e}")
             await message.answer("❌ Ошибка при смене пароля")
@@ -320,14 +351,14 @@ async def main():
         
         if callback.data == "wiz_cancel":
             await state.clear()
-            await callback.message.edit_text(T["start"], reply_markup=kb_main())
+            await render_main_menu(callback.message.chat.id, callback.from_user.id)
             await callback.answer()
             return
         
         # Обработка wiz_back
         if current_state == RegistrationStates.nick.state:
             await state.clear()
-            await callback.message.edit_text(T["start"], reply_markup=kb_main())
+            await render_main_menu(callback.message.chat.id, callback.from_user.id)
         elif current_state == RegistrationStates.pwd.state:
             await state.set_state(RegistrationStates.nick)
             text = f"1/3 · {T['progress'][0]}"
@@ -400,13 +431,13 @@ async def main():
             await state.clear()
             
             if login:
-                await message.answer(T["success"].format(username=login), reply_markup=kb_main())
+                await message.answer(T["success"].format(username=login), reply_markup=kb_main(is_admin=message.from_user.id == ADMIN_ID))
             else:
                 error_msg = T[error].format(max_accounts=CONFIG["settings"]["max_accounts_per_user"])
-                await message.answer(error_msg, reply_markup=kb_main())
+                await message.answer(error_msg, reply_markup=kb_main(is_admin=message.from_user.id == ADMIN_ID))
         except Exception as e:
             logger.error(f"Ошибка регистрации: {e}")
-            await message.answer(T["err_exists"], reply_markup=kb_main())
+            await message.answer(T["err_exists"], reply_markup=kb_main(is_admin=message.from_user.id == ADMIN_ID))
 
     # ==================== АДМИН ПАНЕЛЬ ====================
     
@@ -489,27 +520,46 @@ async def main():
     @dp.callback_query(F.data == "admin_back")
     async def cb_admin_back(callback: CallbackQuery, state: FSMContext):
         await state.clear()
-        try:
-            if callback.message and callback.message.text:
-                await callback.message.edit_text(T["admin_panel"], reply_markup=kb_admin())
-            elif callback.message and callback.message.caption:
-                await callback.message.edit_caption(T["admin_panel"], reply_markup=kb_admin())
-            else:
-                raise TelegramBadRequest(method=None, message="no text to edit")
-        except TelegramBadRequest:
-            if callback.message:
+        if callback.message:
+            try:
+                if callback.message.text:
+                    await callback.message.edit_text(T["admin_panel"], reply_markup=kb_admin())
+                    admin_menu_msgs[callback.from_user.id] = callback.message.message_id
+                    await callback.answer()
+                    return
+                if callback.message.caption:
+                    await callback.message.edit_caption(T["admin_panel"], reply_markup=kb_admin())
+                    admin_menu_msgs[callback.from_user.id] = callback.message.message_id
+                    await callback.answer()
+                    return
+            except TelegramBadRequest:
+                pass
+            try:
                 await callback.message.delete()
-            await callback.message.answer(T["admin_panel"], reply_markup=kb_admin())
+            except Exception:
+                pass
+            if admin_menu_msgs.get(callback.from_user.id) == callback.message.message_id:
+                admin_menu_msgs.pop(callback.from_user.id, None)
+        await render_admin_menu(callback.message.chat.id, callback.from_user.id)
         await callback.answer()
 
 
     @dp.callback_query(F.data == "admin_main")
+    @dp.callback_query(F.data == "admin_main")
     async def cb_admin_main(callback: CallbackQuery, state: FSMContext):
         await state.clear()
-        await callback.message.edit_text(T["start"], reply_markup=kb_main())
+        await render_main_menu(callback.message.chat.id, callback.from_user.id)
         await callback.answer()
 
-    # ==================== ОБЩИЕ ОБРАБОТЧИКИ ====================
+    @dp.callback_query(F.data == "open_admin_panel")
+    async def cb_open_admin_panel(callback: CallbackQuery, state: FSMContext):
+        await state.clear()
+        if callback.from_user.id != ADMIN_ID:
+            await callback.answer(T["no_access"], show_alert=True)
+            return
+        await render_admin_menu(callback.message.chat.id, callback.from_user.id)
+        await callback.answer()
+
 
     @dp.callback_query()
     async def cb_other(callback: CallbackQuery):
@@ -531,7 +581,7 @@ async def main():
             return
         
         if not message.text.startswith("/"):
-            await message.answer("❓ Используйте меню или /start", reply_markup=kb_main())
+            await message.answer("❓ Используйте меню или /start", reply_markup=kb_main(is_admin=message.from_user.id == ADMIN_ID))
 
     logger.info("Все полнофункциональные обработчики зарегистрированы")
     logger.info("Полнофункциональный бот запущен и готов к работе")

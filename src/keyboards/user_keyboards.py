@@ -5,7 +5,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from ..config.settings import CONFIG
 from ..config.translations import TRANSLATIONS as T
 
-def kb_main():
+def kb_main(is_admin: bool = False):
     """Главное меню"""
     buttons = []
     
@@ -27,7 +27,9 @@ def kb_main():
     
     if CONFIG["features"]["changelog"]:
         buttons.append([InlineKeyboardButton(text=T["menu_chlog"], callback_data="show_changelog")])
-    
+    if is_admin:
+        buttons.append([InlineKeyboardButton(text=T["menu_admin"], callback_data="open_admin_panel")])
+
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 def kb_wizard(step):
