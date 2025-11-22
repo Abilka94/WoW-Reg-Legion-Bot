@@ -387,6 +387,10 @@ async def main():
     async def step_nick(message: Message, state: FSMContext):
         nick = message.text.strip()
         
+        try:
+            await message.delete()
+        except Exception:
+            pass
         if not validate_nickname(nick):
             await message.answer(T["err_nick"])
             return
@@ -410,6 +414,10 @@ async def main():
     async def step_pwd(message: Message, state: FSMContext):
         pwd = message.text.strip()
         
+        try:
+            await message.delete()
+        except Exception:
+            pass
         if not validate_password(pwd):
             await message.answer(T["err_pwd"])
             return
@@ -433,6 +441,10 @@ async def main():
     async def step_mail(message: Message, state: FSMContext):
         email = message.text.strip()
         
+        try:
+            await message.delete()
+        except Exception:
+            pass
         if not validate_email(email):
             await message.answer(T["err_mail"])
             return
