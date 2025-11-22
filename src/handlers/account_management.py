@@ -32,14 +32,14 @@ def register_account_handlers(dp, pool, bot_instance):
             accounts = await get_account_info(pool, c.from_user.id)
             
             if not accounts:
-                from ..main import bot
+                from main import bot
                 msg = await bot.send_message(c.from_user.id, T["account_no_account"], reply_markup=kb_back())
                 record_message(c.from_user.id, msg, "command")
                 await c.answer()
                 return
             
             text = T["select_account_prompt"]
-            from ..main import bot
+            from main import bot
             msg = await bot.send_message(c.from_user.id, text, reply_markup=kb_account_list(accounts))
             record_message(c.from_user.id, msg, "command")
             await c.answer()
@@ -55,7 +55,7 @@ def register_account_handlers(dp, pool, bot_instance):
             accounts = await get_account_info(pool, c.from_user.id)
             
             if not accounts:
-                from ..main import bot
+                from main import bot
                 msg = await bot.send_message(c.from_user.id, T["account_no_account"], reply_markup=kb_back())
                 record_message(c.from_user.id, msg, "command")
                 await c.answer()
@@ -63,7 +63,7 @@ def register_account_handlers(dp, pool, bot_instance):
             
             selected = next((acc for acc in accounts if acc[0] == email), None)
             if not selected:
-                from ..main import bot
+                from main import bot
                 msg = await bot.send_message(c.from_user.id, T["no_access"], reply_markup=kb_back())
                 record_message(c.from_user.id, msg, "command")
                 await c.answer()
@@ -79,7 +79,7 @@ def register_account_handlers(dp, pool, bot_instance):
                 if "message is not modified" in str(e).lower():
                     await c.answer()
                     return
-                from ..main import bot
+                from main import bot
                 msg = await bot.send_message(c.from_user.id, text, reply_markup=kb_account_list(accounts, selected_email=email))
             
             record_message(c.from_user.id, msg, "command")
@@ -107,7 +107,7 @@ def register_account_handlers(dp, pool, bot_instance):
             try:
                 await c.message.edit_text(text_msg, reply_markup=kb_account_list(accounts, selected_email=email))
             except TelegramBadRequest:
-                from ..main import bot
+                from main import bot
                 await bot.send_message(c.from_user.id, text_msg, reply_markup=kb_account_list(accounts, selected_email=email))
             await c.answer()
 
@@ -122,7 +122,7 @@ def register_account_handlers(dp, pool, bot_instance):
             accounts = await get_account_info(pool, c.from_user.id)
             
             if not accounts:
-                from ..main import bot
+                from main import bot
                 msg = await bot.send_message(c.from_user.id, T["account_no_account"], reply_markup=kb_back())
                 record_message(c.from_user.id, msg, "command")
                 await c.answer()
@@ -136,7 +136,7 @@ def register_account_handlers(dp, pool, bot_instance):
                     break
             
             if not sel:
-                from ..main import bot
+                from main import bot
                 msg = await bot.send_message(c.from_user.id, T["select_account_prompt"], reply_markup=kb_account_list(accounts))
                 record_message(c.from_user.id, msg, "command")
                 await c.answer()
@@ -144,7 +144,7 @@ def register_account_handlers(dp, pool, bot_instance):
             
             await state.set_state(ChangePasswordStates.new_password)
             await state.update_data(email=sel)
-            from ..main import bot
+            from main import bot
             msg = await bot.send_message(c.from_user.id, T["change_password_prompt"], reply_markup=kb_back())
             record_message(c.from_user.id, msg, "command")
             await c.answer()
@@ -186,7 +186,7 @@ def register_account_handlers(dp, pool, bot_instance):
             await delete_all_bot_messages(c.from_user.id)
             
             if not success:
-                from ..main import bot
+                from main import bot
                 msg = await bot.send_message(c.from_user.id, T["delete_account_error"], reply_markup=kb_back())
                 record_message(c.from_user.id, msg, "command")
                 await c.answer()
@@ -194,14 +194,14 @@ def register_account_handlers(dp, pool, bot_instance):
             
             accounts = await get_account_info(pool, c.from_user.id)
             if not accounts:
-                from ..main import bot
+                from main import bot
                 msg = await bot.send_message(c.from_user.id, T["account_no_account"], reply_markup=kb_back())
                 record_message(c.from_user.id, msg, "command")
                 await c.answer()
                 return
             
             text = T["delete_account_success"] + "\n\n" + T["select_account_prompt"]
-            from ..main import bot
+            from main import bot
             msg = await bot.send_message(c.from_user.id, text, reply_markup=kb_account_list(accounts))
             record_message(c.from_user.id, msg, "command")
             await c.answer()

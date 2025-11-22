@@ -32,14 +32,14 @@ def register_admin_handlers(dp, pool, bot_instance):
             await delete_all_bot_messages(c.from_user.id)
             
             if c.from_user.id != ADMIN_ID:
-                from ..main import bot
+                from main import bot
                 msg = await bot.send_message(c.from_user.id, T["no_access"], reply_markup=kb_back())
                 record_message(c.from_user.id, msg, "command")
                 await c.answer()
                 return
             
             await state.set_state(AdminStates.broadcast_text)
-            from ..main import bot
+            from main import bot
             msg = await bot.send_message(c.from_user.id, "Введите текст рассылки:", reply_markup=kb_admin_back())
             record_message(c.from_user.id, msg, "command")
             await c.answer()
@@ -70,7 +70,7 @@ def register_admin_handlers(dp, pool, bot_instance):
                         users = await cur.fetchall()
                 
                 ok = fail = 0
-                from ..main import bot
+                from main import bot
                 for (uid,) in users:
                     try:
                         await bot.send_message(uid, m.text)
@@ -99,7 +99,7 @@ def register_admin_handlers(dp, pool, bot_instance):
             await delete_all_bot_messages(c.from_user.id)
             
             if c.from_user.id != ADMIN_ID:
-                from ..main import bot
+                from main import bot
                 msg = await bot.send_message(c.from_user.id, T["no_access"], reply_markup=kb_back())
                 record_message(c.from_user.id, msg, "command")
                 await c.answer()
@@ -111,11 +111,11 @@ def register_admin_handlers(dp, pool, bot_instance):
                 txt = T["db_ok"]
             except Exception as e:
                 txt = f"❌ {e}"
-                from ..main import bot
+                from main import bot
                 await notify_admin(bot, str(e))
                 logger.error(f"Ошибка проверки базы данных: {e}")
             
-            from ..main import bot
+            from main import bot
             msg = await bot.send_message(c.from_user.id, txt, reply_markup=kb_admin_back())
             record_message(c.from_user.id, msg, "command")
             await c.answer()
@@ -131,14 +131,14 @@ def register_admin_handlers(dp, pool, bot_instance):
             await delete_all_bot_messages(c.from_user.id)
             
             if c.from_user.id != ADMIN_ID:
-                from ..main import bot
+                from main import bot
                 msg = await bot.send_message(c.from_user.id, T["no_access"], reply_markup=kb_back())
                 record_message(c.from_user.id, msg, "command")
                 await c.answer()
                 return
             
             await state.set_state(AdminStates.delete_account_input)
-            from ..main import bot
+            from main import bot
             msg = await bot.send_message(c.from_user.id, T["admin_delete_prompt"], reply_markup=kb_admin_back())
             record_message(c.from_user.id, msg, "command")
             await c.answer()
@@ -188,7 +188,7 @@ def register_admin_handlers(dp, pool, bot_instance):
             await delete_all_bot_messages(c.from_user.id)
             
             if c.from_user.id != ADMIN_ID:
-                from ..main import bot
+                from main import bot
                 msg = await bot.send_message(c.from_user.id, T["no_access"], reply_markup=kb_back())
                 record_message(c.from_user.id, msg, "command")
                 await c.answer()
@@ -196,12 +196,12 @@ def register_admin_handlers(dp, pool, bot_instance):
             
             try:
                 from ..config.settings import reload_config
-                from ..main import bot
+                from main import bot
                 await reload_config(bot)
                 msg = await bot.send_message(c.from_user.id, T["reload_config_success"], reply_markup=kb_admin())
             except Exception as e:
                 logger.error(f"Ошибка при перезагрузке конфигурации: {e}")
-                from ..main import bot
+                from main import bot
                 msg = await bot.send_message(c.from_user.id, T["reload_config_error"].format(error=str(e)), reply_markup=kb_admin())
             
             record_message(c.from_user.id, msg, "command")
@@ -216,7 +216,7 @@ def register_admin_handlers(dp, pool, bot_instance):
             
             await state.clear()
             await delete_all_bot_messages(c.from_user.id)
-            from ..main import bot
+            from main import bot
             msg = await bot.send_message(c.from_user.id, T["start"], reply_markup=kb_main())
             record_message(c.from_user.id, msg, "command")
             await c.answer()
