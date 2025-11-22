@@ -266,10 +266,10 @@ async def main():
         email = callback.data.replace("reset_password_", "")
         accounts = await get_account_info(pool, callback.from_user.id)
         if not accounts:
-            await callback.answer("? ??? ???????", show_alert=True)
+            await callback.answer("❌ Аккаунт не найден", show_alert=True)
             return
         if not any(acc[0] == email for acc in accounts):
-            await callback.answer("? ??? ???????", show_alert=True)
+            await callback.answer("❌ Нет доступа", show_alert=True)
             return
         tmp = await reset_password(pool, email)
         if tmp is None:
