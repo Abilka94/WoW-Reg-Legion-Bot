@@ -192,7 +192,6 @@ async def main():
         await state.clear()
         await state.clear()
         await render_main_menu(callback.message.chat.id, callback.from_user.id)
-        await callback.answer()
     @dp.callback_query(F.data == "show_info")
     async def cb_show_info(callback: CallbackQuery, state: FSMContext):
         await state.clear()
@@ -205,7 +204,6 @@ async def main():
                    "🔗 Для получения данных подключения к серверу обратитесь к администратору."
         
         await callback.message.edit_text(text, reply_markup=kb_back())
-        await callback.answer()
 
     @dp.callback_query(F.data == "show_news")
     async def cb_show_news(callback: CallbackQuery, state: FSMContext):
@@ -219,7 +217,6 @@ async def main():
                    "В данный момент новостей нет.\nСледите за обновлениями!"
         
         await callback.message.edit_text(text, reply_markup=kb_back())
-        await callback.answer()
 
     # ==================== УПРАВЛЕНИЕ АККАУНТАМИ ====================
     
@@ -239,7 +236,6 @@ async def main():
             text = T["select_account_prompt"]
         
         await callback.message.edit_text(text, reply_markup=kb_account_list(accounts) if accounts else kb_back())
-        await callback.answer()
         logger.info(f"Просмотр аккаунтов пользователем {callback.from_user.id}")
 
     @dp.callback_query(F.data.startswith("select_account_"))
@@ -263,7 +259,6 @@ async def main():
         text = f"🔑 Ваш аккаунт:\nЛогин: <code>{username}</code>\nE-mail: <code>{email}</code>\nСтатус: {pwd_status}"
         
         await callback.message.edit_text(text, reply_markup=kb_account_list(accounts, selected_email=email))
-        await callback.answer()
 
     @dp.callback_query(F.data == "change_password")
     async def cb_change_password(callback: CallbackQuery, state: FSMContext):
@@ -286,7 +281,6 @@ async def main():
         await state.set_state(ChangePasswordStates.new_password)
         await state.update_data(email=selected_email)
         await callback.message.edit_text(T["change_password_prompt"], reply_markup=kb_back())
-        await callback.answer()
 
     @dp.message(ChangePasswordStates.new_password)
     async def step_change_password(message: Message, state: FSMContext):
@@ -326,7 +320,6 @@ async def main():
             logger.error(f"Ошибка удаления аккаунта: {e}")
             await callback.message.edit_text("❌ Ошибка при удалении аккаунта", reply_markup=kb_back())
         
-        await callback.answer()
 
     # ==================== РЕГИСТРАЦИЯ ====================
     
@@ -343,7 +336,6 @@ async def main():
             msg = await callback.message.answer(text, reply_markup=kb_wizard(0))
             user_wizard_msg[callback.from_user.id] = msg.message_id
         
-        await callback.answer()
 
     @dp.callback_query(F.data.in_(["wiz_back", "wiz_cancel"]))
     async def cb_wiz_nav(callback: CallbackQuery, state: FSMContext):
@@ -368,7 +360,6 @@ async def main():
             text = f"2/3 · {T['progress'][1]}"
             await callback.message.edit_text(text, reply_markup=kb_wizard(1))
         
-        await callback.answer()
 
     @dp.message(RegistrationStates.nick)
     async def step_nick(message: Message, state: FSMContext):
@@ -457,7 +448,6 @@ async def main():
             text = "❌ База данных не подключена"
             
         await callback.message.edit_text(text, reply_markup=kb_admin_back())
-        await callback.answer()
 
     @dp.callback_query(F.data == "admin_delete_account")
     async def cb_admin_delete_account(callback: CallbackQuery, state: FSMContext):
@@ -467,7 +457,6 @@ async def main():
         
         await state.set_state(AdminStates.delete_account_input)
         await callback.message.edit_text(T["admin_delete_prompt"], reply_markup=kb_admin_back())
-        await callback.answer()
 
     @dp.message(AdminStates.delete_account_input)
     async def step_admin_delete_account(message: Message, state: FSMContext):
@@ -497,14 +486,13 @@ async def main():
         
         try:
             if os.path.exists("bot.log"):
-                await callback.message.answer_document(FSInputFile("bot.log"), reply_markup=kb_admin_back())
+                await callback.message.answer_document(FSInputFile("bot.log"))
             else:
                 await callback.message.edit_text("❌ Лог файл не найден", reply_markup=kb_admin_back())
         except Exception as e:
             logger.error(f"Ошибка скачивания лога: {e}")
             await callback.message.edit_text(f"❌ Ошибка: {e}", reply_markup=kb_admin_back())
         
-        await callback.answer()
 
     # Остальные админ функции
     @dp.callback_query(F.data.in_(["admin_broadcast", "admin_reload_config"]))
@@ -543,7 +531,6 @@ async def main():
         if callback.message:
             admin_menu_msgs[callback.from_user.id] = callback.message.message_id
         await render_admin_menu(callback.message.chat.id, callback.from_user.id)
-        await callback.answer()
 
 
     @dp.callback_query(F.data == "admin_main")
@@ -553,7 +540,6 @@ async def main():
         if callback.message:
             main_menu_msgs[callback.from_user.id] = callback.message.message_id
         await render_main_menu(callback.message.chat.id, callback.from_user.id)
-        await callback.answer()
 
     @dp.callback_query(F.data == "open_admin_panel")
     async def cb_open_admin_panel(callback: CallbackQuery, state: FSMContext):
@@ -566,7 +552,6 @@ async def main():
         if callback.message:
             admin_menu_msgs[callback.from_user.id] = callback.message.message_id
         await render_admin_menu(callback.message.chat.id, callback.from_user.id)
-        await callback.answer()
 
 
     @dp.callback_query()
