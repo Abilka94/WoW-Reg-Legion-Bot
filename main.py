@@ -444,10 +444,23 @@ async def main():
             await state.clear()
             
             if login:
-                await message.answer(T["success"].format(username=login), reply_markup=kb_main(is_admin=message.from_user.id == ADMIN_ID))
+                final_text = T["success"].format(username=login)
             else:
-                error_msg = T[error].format(max_accounts=CONFIG["settings"]["max_accounts_per_user"])
-                await message.answer(error_msg, reply_markup=kb_main(is_admin=message.from_user.id == ADMIN_ID))
+                final_text = T[error].format(max_accounts=CONFIG["settings"]["max_accounts_per_user"])
+            
+            wizard_msg_id = user_wizard_msg.pop(message.from_user.id, None)
+            if wizard_msg_id:
+                try:
+                    await bot.edit_message_text(
+                        text=final_text,
+                        chat_id=message.chat.id,
+                        message_id=wizard_msg_id,
+                        reply_markup=kb_main(is_admin=message.from_user.id == ADMIN_ID)
+                    )
+                    return
+                except TelegramBadRequest:
+                    pass
+            await message.answer(final_text, reply_markup=kb_main(is_admin=message.from_user.id == ADMIN_ID))
         except Exception as e:
             logger.error(f"Ошибка регистрации: {e}")
             await message.answer(T["err_exists"], reply_markup=kb_main(is_admin=message.from_user.id == ADMIN_ID))
