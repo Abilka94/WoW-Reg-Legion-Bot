@@ -45,43 +45,25 @@ class RateLimit:
             
             # Добавляем в обрабатываемые
             self.processing_callbacks.add(callback_id)
-            
-            # НЕ отвечаем на callback здесь - пусть обработчики отвечают сами
-            # Это позволяет обработчикам отправлять alert'ы и другие ответы
         
-        # Получаем или создаем блокировку для пользователя
-        if uid not in self.locks:
-            self.locks[uid] = asyncio.Lock()
-        
-        lock = self.locks[uid]
-        
-        # Проверяем, не заблокирован ли уже запрос
-        if lock.locked():
-            if isinstance(event, CallbackQuery):
-                try:
-                    await event.answer("⏱ Обрабатывается предыдущий запрос...", show_alert=False)
-                except Exception:
-                    pass
-            return
-        
+        # Для callback'ов не используем блокировку - только rate limiting и проверка дубликатов
+        # Это предотвращает зависания при ошибках в обработчиках
         try:
-            # Блокируем выполнение для этого пользователя
-            async with lock:
-                self.last[uid] = now
-                return await handler(event, data)
+            self.last[uid] = now
+            return await handler(event, data)
         finally:
             # Удаляем callback из обрабатываемых после завершения
             if isinstance(event, CallbackQuery):
                 callback_id = f"{uid}_{event.id}"
                 self.processing_callbacks.discard(callback_id)
-                
-                # Очистка старых блокировок (если пользователь неактивен более 5 минут)
-                if len(self.locks) > 1000:
-                    # Простая очистка: удаляем блокировки для неактивных пользователей
-                    inactive_users = [
-                        u for u, last_time in self.last.items()
-                        if now - last_time > 300  # 5 минут
-                    ]
-                    for inactive_uid in inactive_users[:100]:  # Удаляем максимум 100 за раз
-                        self.locks.pop(inactive_uid, None)
-                        self.last.pop(inactive_uid, None)
+        
+        # Очистка старых блокировок (если пользователь неактивен более 5 минут)
+        if len(self.locks) > 1000:
+            # Простая очистка: удаляем блокировки для неактивных пользователей
+            inactive_users = [
+                u for u, last_time in self.last.items()
+                if now - last_time > 300  # 5 минут
+            ]
+            for inactive_uid in inactive_users[:100]:  # Удаляем максимум 100 за раз
+                self.locks.pop(inactive_uid, None)
+                self.last.pop(inactive_uid, None)
