@@ -45,6 +45,14 @@ class RateLimit:
             
             # Добавляем в обрабатываемые
             self.processing_callbacks.add(callback_id)
+            
+            # КРИТИЧНО: Отвечаем на callback СРАЗУ, чтобы убрать индикатор загрузки
+            # Это предотвращает подвисание кнопок при долгих операциях
+            try:
+                await event.answer()
+            except Exception:
+                # Если не удалось ответить, продолжаем обработку
+                pass
         
         # Получаем или создаем блокировку для пользователя
         if uid not in self.locks:
