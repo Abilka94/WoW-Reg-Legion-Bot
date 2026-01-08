@@ -119,6 +119,22 @@ def register_registration_handlers(dp, pool, bot_instance):
 
     @dp.message(RegistrationStates.nick)
     async def step_nick(m: Message, state: FSMContext):
+        # Если пользователь отправил команду, очищаем состояние и пропускаем обработку
+        if m.text and m.text.startswith("/"):
+            await state.clear()
+            return
+        
+        # Если сообщение явно не является попыткой ввести никнейм (содержит пробелы, слишком длинное и т.д.)
+        # очищаем состояние и показываем главное меню
+        if m.text and (len(m.text.strip()) > 50 or " " in m.text.strip() or not m.text.strip()):
+            await state.clear()
+            await delete_user_message(m)
+            from ..main import bot
+            msg = await bot.send_message(m.from_user.id, T["start"], reply_markup=kb_main())
+            record_message(m.from_user.id, msg, "command")
+            logger.info(f"Очистка зависшего состояния регистрации для user_id={m.from_user.id}")
+            return
+        
         nick = m.text.strip()
         
         if not validate_nickname(nick):
@@ -155,6 +171,21 @@ def register_registration_handlers(dp, pool, bot_instance):
 
     @dp.message(RegistrationStates.pwd)
     async def step_pwd(m: Message, state: FSMContext):
+        # Если пользователь отправил команду, очищаем состояние и пропускаем обработку
+        if m.text and m.text.startswith("/"):
+            await state.clear()
+            return
+        
+        # Если сообщение явно не является попыткой ввести пароль (команда или слишком длинное)
+        if m.text and (len(m.text.strip()) > 100 or not m.text.strip()):
+            await state.clear()
+            await delete_user_message(m)
+            from ..main import bot
+            msg = await bot.send_message(m.from_user.id, T["start"], reply_markup=kb_main())
+            record_message(m.from_user.id, msg, "command")
+            logger.info(f"Очистка зависшего состояния регистрации (pwd) для user_id={m.from_user.id}")
+            return
+        
         pwd = m.text.strip()
         
         if not validate_password(pwd):
@@ -191,6 +222,21 @@ def register_registration_handlers(dp, pool, bot_instance):
 
     @dp.message(RegistrationStates.mail)
     async def step_mail(m: Message, state: FSMContext):
+        # Если пользователь отправил команду, очищаем состояние и пропускаем обработку
+        if m.text and m.text.startswith("/"):
+            await state.clear()
+            return
+        
+        # Если сообщение явно не является попыткой ввести email (слишком длинное или пустое)
+        if m.text and (len(m.text.strip()) > 254 or not m.text.strip()):
+            await state.clear()
+            await delete_user_message(m)
+            from ..main import bot
+            msg = await bot.send_message(m.from_user.id, T["start"], reply_markup=kb_main())
+            record_message(m.from_user.id, msg, "command")
+            logger.info(f"Очистка зависшего состояния регистрации (mail) для user_id={m.from_user.id}")
+            return
+        
         email = m.text.strip()
         
         # Строгая валидация email с проверкой известных провайдеров
