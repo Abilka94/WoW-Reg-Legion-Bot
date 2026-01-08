@@ -428,8 +428,36 @@ async def main():
 
     @dp.callback_query(F.data.startswith("delete_account_"))
     async def cb_delete_account(callback: CallbackQuery, state: FSMContext):
-        await state.clear()
         email = callback.data.replace("delete_account_", "")
+        
+        # Показываем подтверждение удаления
+        accounts = await get_account_info(pool, callback.from_user.id)
+        selected = next((acc for acc in accounts if acc[0] == email), None)
+        
+        if not selected:
+            await callback.answer("❌ Аккаунт не найден", show_alert=True)
+            return
+        
+        email_addr, username, is_temp, temp_password = selected
+        confirm_text = f"⚠️ ВНИМАНИЕ! Вы уверены, что хотите удалить аккаунт?\n\n" \
+                       f"📧 E-mail: <code>{email_addr}</code>\n" \
+                       f"👤 Логин: <code>{username}</code>\n\n" \
+                       f"❌ Это действие нельзя отменить!"
+        
+        confirm_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [
+                InlineKeyboardButton(text="✅ Да, удалить", callback_data=f"confirm_delete_account_{email}"),
+                InlineKeyboardButton(text="❌ Отмена", callback_data=f"select_account_{email}")
+            ]
+        ])
+        
+        await safe_edit_message(bot, callback, confirm_text, reply_markup=confirm_keyboard)
+        # callback.answer() уже вызван в middleware
+    
+    @dp.callback_query(F.data.startswith("confirm_delete_account_"))
+    async def cb_confirm_delete_account(callback: CallbackQuery, state: FSMContext):
+        await state.clear()
+        email = callback.data.replace("confirm_delete_account_", "")
         
         try:
             success = await delete_account(pool, callback.from_user.id, email)
@@ -714,12 +742,30 @@ async def main():
         
         try:
             login, error = await register_user(pool, data["nick"], data["pwd"], email, message.from_user.id)
-            await state.clear()
             
-            if login:
-                final_text = T["success"].format(username=login)
-            else:
+            if not login:
+                # Если ошибка с username, возвращаемся к шагу ввода никнейма
+                if error == "err_username_exists":
+                    await state.set_state(RegistrationStates.nick)
+                    wizard_id = user_wizard_msg.get(message.from_user.id)
+                    if wizard_id:
+                        try:
+                            await bot.edit_message_text(
+                                text=f"❌ {T[error]}\n\n1/3 · {T['progress'][0]}",
+                                chat_id=message.chat.id,
+                                message_id=wizard_id,
+                                reply_markup=kb_wizard(0)
+                            )
+                        except Exception:
+                            pass
+                    return
+                
+                # Для других ошибок завершаем регистрацию
+                await state.clear()
                 final_text = T[error].format(max_accounts=CONFIG["settings"]["max_accounts_per_user"])
+            else:
+                await state.clear()
+                final_text = T["success"].format(username=login)
             
             # Удаляем старое wizard сообщение перед созданием нового меню (как в /start)
             wizard_msg_id = user_wizard_msg.pop(message.from_user.id, None)

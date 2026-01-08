@@ -16,6 +16,13 @@ async def email_exists(pool, email):
             await cur.execute("SELECT 1 FROM battlenet_accounts WHERE email=%s", (email.upper(),))
             return bool(await cur.fetchone())
 
+async def username_exists(pool, username):
+    """Проверяет, существует ли username в базе данных"""
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute("SELECT 1 FROM account WHERE username=%s", (username,))
+            return bool(await cur.fetchone())
+
 async def count_user_accounts(pool, telegram_id):
     """Подсчитывает количество аккаунтов пользователя"""
     async with pool.acquire() as conn:
@@ -36,6 +43,11 @@ async def register_user(pool, nick, pwd, mail, telegram_id):
         logger.warning(f"Попытка регистрации с существующим e-mail: {mu}")
         return None, "err_exists"
     
+    # Проверка уникальности username
+    if await username_exists(pool, nick):
+        logger.warning(f"Попытка регистрации с существующим username: {nick}")
+        return None, "err_username_exists"
+    
     # Хеширование пароля
     inner = hashlib.sha256(mu.encode()).hexdigest().upper()
     outer = hashlib.sha256(f"{inner}:{pu}".encode()).hexdigest().upper()
@@ -52,7 +64,8 @@ async def register_user(pool, nick, pwd, mail, telegram_id):
             # Получение ID
             await cur.execute("SELECT id FROM battlenet_accounts WHERE email=%s", (mu,))
             bid = (await cur.fetchone())[0]
-            username = f"{bid}#1"
+            # Используем введенный пользователем никнейм вместо bid#1
+            username = nick
             
             # Создание аккаунта
             ah = hashlib.sha1(f"{username}:{pu}".encode()).hexdigest().upper()
