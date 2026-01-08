@@ -102,13 +102,31 @@ async def main():
         user_warning_msgs.pop(user_id, None)
         kb = kb_main(is_admin=user_id == ADMIN_ID)
         msg_id = main_menu_msgs.get(user_id)
-        if msg_id and callback_or_message:
+        
+        # Пытаемся отредактировать существующее сообщение, если оно есть
+        if msg_id:
+            try:
+                await bot.edit_message_text(
+                    text=T["start"],
+                    chat_id=chat_id,
+                    message_id=msg_id,
+                    reply_markup=kb
+                )
+                return
+            except (TelegramBadRequest, Exception):
+                # Если не удалось отредактировать, удаляем из кэша и создаем новое
+                main_menu_msgs.pop(user_id, None)
+        
+        # Если есть callback_or_message, пытаемся отредактировать его
+        if callback_or_message:
             try:
                 msg = await safe_edit_message(bot, callback_or_message, T["start"], reply_markup=kb)
                 main_menu_msgs[user_id] = msg.message_id
                 return msg
             except Exception:
-                main_menu_msgs.pop(user_id, None)
+                pass
+        
+        # Создаем новое сообщение только если не удалось отредактировать существующее
         msg = await bot.send_message(chat_id, T["start"], reply_markup=kb)
         main_menu_msgs[user_id] = msg.message_id
         return msg
@@ -148,6 +166,11 @@ async def main():
     @dp.message(Command("start"))
     async def cmd_start(message: Message, state: FSMContext):
         await state.clear()
+        # Удаляем сообщение пользователя, чтобы не накапливались
+        try:
+            await message.delete()
+        except Exception:
+            pass
         await render_main_menu(message.chat.id, message.from_user.id)
         logger.info(f"Команда /start от пользователя {message.from_user.id}")
 
@@ -690,23 +713,7 @@ async def main():
                 except Exception:
                     pass
                 
-                # Используем редактирование одного сообщения вместо создания новых
-                warning_text = "❌ Пожалуйста, отправляйте только текстовые сообщения.\nФайлы, стикеры, эмодзи и другие типы сообщений не поддерживаются."
-                warning_msg_id = user_warning_msgs.get(message.from_user.id)
-                if warning_msg_id:
-                    try:
-                        await bot.edit_message_text(
-                            text=warning_text,
-                            chat_id=message.chat.id,
-                            message_id=warning_msg_id,
-                            reply_markup=kb_main(is_admin=message.from_user.id == ADMIN_ID)
-                        )
-                        return
-                    except (TelegramBadRequest, Exception):
-                        user_warning_msgs.pop(message.from_user.id, None)
-                
-                msg = await message.answer(warning_text, reply_markup=kb_main(is_admin=message.from_user.id == ADMIN_ID))
-                user_warning_msgs[message.from_user.id] = msg.message_id
+                # Просто удаляем нежелательные типы сообщений без ответа
             return
         
         # Блокируем все нежелательные типы сообщений (кроме команд)
@@ -718,24 +725,7 @@ async def main():
                 await message.delete()
             except Exception:
                 pass
-            
-            # Используем редактирование одного сообщения вместо создания новых
-            warning_text = "❌ Пожалуйста, отправляйте только текстовые сообщения.\nФайлы, стикеры, эмодзи и другие типы сообщений не поддерживаются."
-            warning_msg_id = user_warning_msgs.get(message.from_user.id)
-            if warning_msg_id:
-                try:
-                    await bot.edit_message_text(
-                        text=warning_text,
-                        chat_id=message.chat.id,
-                        message_id=warning_msg_id,
-                        reply_markup=kb_main(is_admin=message.from_user.id == ADMIN_ID)
-                    )
-                    return
-                except (TelegramBadRequest, Exception):
-                    user_warning_msgs.pop(message.from_user.id, None)
-            
-            msg = await message.answer(warning_text, reply_markup=kb_main(is_admin=message.from_user.id == ADMIN_ID))
-            user_warning_msgs[message.from_user.id] = msg.message_id
+            # Просто удаляем нежелательные типы сообщений без ответа
             return
         
         # Если это текстовое сообщение, но не команда - обрабатываем дальше
@@ -752,37 +742,12 @@ async def main():
             ):
                 return
             
-            # Вне процесса регистрации - удаляем все текстовые сообщения как невалидные
+            # Вне процесса регистрации - просто удаляем сообщение пользователя без ответа
             try:
                 await message.delete()
             except Exception:
                 pass
-            
-            # Фильтруем текст
-            filtered_text = filter_text(message.text)
-            warning_text = "❓ Используйте меню или /start"
-            if not filtered_text:
-                warning_text = "❌ Сообщение содержит только недопустимые символы.\nПожалуйста, используйте только буквы, цифры и основные знаки препинания."
-            
-            # Используем редактирование одного сообщения вместо создания новых
-            warning_msg_id = user_warning_msgs.get(message.from_user.id)
-            if warning_msg_id:
-                try:
-                    # Пытаемся отредактировать существующее сообщение
-                    await bot.edit_message_text(
-                        text=warning_text,
-                        chat_id=message.chat.id,
-                        message_id=warning_msg_id,
-                        reply_markup=kb_main(is_admin=message.from_user.id == ADMIN_ID)
-                    )
-                    return
-                except (TelegramBadRequest, Exception):
-                    # Если не удалось отредактировать (сообщение удалено или недоступно), создаем новое
-                    user_warning_msgs.pop(message.from_user.id, None)
-            
-            # Создаем новое сообщение и сохраняем его ID
-            msg = await message.answer(warning_text, reply_markup=kb_main(is_admin=message.from_user.id == ADMIN_ID))
-            user_warning_msgs[message.from_user.id] = msg.message_id
+            # Не отправляем никаких ответов - просто удаляем невалидное сообщение
 
     logger.info("Все полнофункциональные обработчики зарегистрированы")
     logger.info("Полнофункциональный бот запущен и готов к работе")

@@ -40,30 +40,9 @@ def register_message_handlers(dp, pool, bot_instance):
         if m.text and m.text.startswith("/"):
             return
         
-        # Вне процесса регистрации - удаляем все текстовые сообщения как невалидные
+        # Вне процесса регистрации - просто удаляем сообщение пользователя без ответа
         await delete_user_message(m)
-        
-        # Используем редактирование одного сообщения вместо создания новых
-        warning_text = "❓ Используйте меню или /start"
-        warning_msg_id = user_warning_msgs.get(m.from_user.id)
-        if warning_msg_id:
-            try:
-                # Пытаемся отредактировать существующее сообщение
-                await bot_instance.edit_message_text(
-                    text=warning_text,
-                    chat_id=m.chat.id,
-                    message_id=warning_msg_id,
-                    reply_markup=kb_main()
-                )
-                return
-            except (TelegramBadRequest, Exception):
-                # Если не удалось отредактировать (сообщение удалено или недоступно), создаем новое
-                user_warning_msgs.pop(m.from_user.id, None)
-        
-        # Создаем новое сообщение и сохраняем его ID
-        if m.text:
-            msg = await m.answer(warning_text, reply_markup=kb_main())
-            user_warning_msgs[m.from_user.id] = msg.message_id
+        # Не отправляем никаких ответов - просто удаляем невалидное сообщение
 
     @dp.message()
     async def unknown(m: Message):
