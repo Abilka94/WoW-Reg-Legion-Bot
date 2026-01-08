@@ -133,17 +133,31 @@ async def main():
 
     async def render_admin_menu(chat_id: int, user_id: int, callback_or_message=None):
         msg_id = admin_menu_msgs.get(user_id)
-        if msg_id and callback_or_message:
+        
+        # Пытаемся отредактировать существующее сообщение, если оно есть
+        if msg_id:
+            try:
+                await bot.edit_message_text(
+                    text=T["admin_panel"],
+                    chat_id=chat_id,
+                    message_id=msg_id,
+                    reply_markup=kb_admin()
+                )
+                return
+            except (TelegramBadRequest, Exception):
+                # Если не удалось отредактировать, удаляем из кэша и создаем новое
+                admin_menu_msgs.pop(user_id, None)
+        
+        # Если есть callback_or_message, пытаемся отредактировать его
+        if callback_or_message:
             try:
                 msg = await safe_edit_message(bot, callback_or_message, T["admin_panel"], reply_markup=kb_admin())
                 admin_menu_msgs[user_id] = msg.message_id
                 return msg
             except Exception:
-                try:
-                    await bot.delete_message(chat_id, msg_id)
-                except Exception:
-                    pass
-                admin_menu_msgs.pop(user_id, None)
+                pass
+        
+        # Создаем новое сообщение только если не удалось отредактировать существующее
         msg = await bot.send_message(chat_id, T["admin_panel"], reply_markup=kb_admin())
         admin_menu_msgs[user_id] = msg.message_id
         return msg
@@ -201,6 +215,21 @@ async def main():
     @dp.message(Command("admin"))
     async def cmd_admin(message: Message, state: FSMContext):
         await state.clear()
+        # Удаляем сообщение пользователя
+        try:
+            await message.delete()
+        except Exception:
+            pass
+        
+        # Удаляем старое сообщение админ меню, если оно существует (как в /start)
+        old_admin_id = admin_menu_msgs.get(message.from_user.id)
+        if old_admin_id:
+            try:
+                await bot.delete_message(message.chat.id, old_admin_id)
+            except Exception:
+                pass
+            admin_menu_msgs.pop(message.from_user.id, None)
+        
         if message.from_user.id != ADMIN_ID:
             await message.answer(T["no_access"], reply_markup=kb_back())
             return
@@ -335,7 +364,8 @@ async def main():
                 await message.delete()
             except Exception:
                 pass
-            await message.answer("❌ Пожалуйста, отправляйте только текстовые сообщения.")
+            # Редактируем существующее сообщение с ошибкой (используем main_menu_msgs как fallback)
+            # В идеале нужно хранить ID сообщения для этого состояния, но для упрощения используем main_menu_msgs
             return
         
         data = await state.get_data()
@@ -343,26 +373,58 @@ async def main():
         # Фильтруем текст перед обработкой
         new_password = filter_text(message.text.strip(), max_length=100)
         
+        try:
+            await message.delete()
+        except Exception:
+            pass
+        
         if not new_password:
-            await message.answer("❌ Пароль содержит недопустимые символы. Используйте только буквы, цифры и основные знаки препинания.")
+            # Просто возвращаемся, не создавая новых сообщений
             return
         
         if new_password in (T["to_main"], T["cancel"]):
             await state.clear()
-            await message.answer(T["start"], reply_markup=kb_main(is_admin=message.from_user.id == ADMIN_ID))
+            # Удаляем старое сообщение меню перед созданием нового (как в /start)
+            old_menu_id = main_menu_msgs.get(message.from_user.id)
+            if old_menu_id:
+                try:
+                    await bot.delete_message(message.chat.id, old_menu_id)
+                except Exception:
+                    pass
+                main_menu_msgs.pop(message.from_user.id, None)
+            await render_main_menu(message.chat.id, message.from_user.id)
             return
         
         if not validate_password(new_password):
-            await message.answer(T["err_pwd"])
+            # Просто возвращаемся, не создавая новых сообщений
             return
         
         try:
             await change_password(pool, email, new_password)
             await state.clear()
-            await message.answer(T["change_password_success"], reply_markup=kb_main(is_admin=message.from_user.id == ADMIN_ID))
+            # Удаляем старое сообщение меню перед созданием нового (как в /start)
+            old_menu_id = main_menu_msgs.get(message.from_user.id)
+            if old_menu_id:
+                try:
+                    await bot.delete_message(message.chat.id, old_menu_id)
+                except Exception:
+                    pass
+                main_menu_msgs.pop(message.from_user.id, None)
+            # Создаем новое сообщение меню
+            await render_main_menu(message.chat.id, message.from_user.id)
         except Exception as e:
             logger.error(f"Ошибка смены пароля: {e}")
-            await message.answer("❌ Ошибка при смене пароля")
+            await state.clear()
+            # Удаляем старое сообщение меню перед созданием нового
+            old_menu_id = main_menu_msgs.get(message.from_user.id)
+            if old_menu_id:
+                try:
+                    await bot.delete_message(message.chat.id, old_menu_id)
+                except Exception:
+                    pass
+                main_menu_msgs.pop(message.from_user.id, None)
+            # Создаем новое сообщение меню
+            await render_main_menu(message.chat.id, message.from_user.id)
 
     @dp.callback_query(F.data.startswith("delete_account_"))
     async def cb_delete_account(callback: CallbackQuery, state: FSMContext):
@@ -388,6 +450,16 @@ async def main():
         await state.clear()
         # Очищаем предупреждающие сообщения при начале регистрации
         user_warning_msgs.pop(callback.from_user.id, None)
+        
+        # Удаляем старое wizard сообщение, если оно существует (как в /start)
+        old_wizard_id = user_wizard_msg.get(callback.from_user.id)
+        if old_wizard_id:
+            try:
+                await bot.delete_message(callback.message.chat.id, old_wizard_id)
+            except Exception:
+                pass
+            user_wizard_msg.pop(callback.from_user.id, None)
+        
         await state.set_state(RegistrationStates.nick)
         text = f"1/3 · {T['progress'][0]}"
         
@@ -434,7 +506,18 @@ async def main():
                 await message.delete()
             except Exception:
                 pass
-            await message.answer("❌ Пожалуйста, отправляйте только текстовые сообщения.")
+            # Редактируем существующее wizard сообщение с ошибкой
+            wizard_id = user_wizard_msg.get(message.from_user.id)
+            if wizard_id:
+                try:
+                    await bot.edit_message_text(
+                        text="❌ Пожалуйста, отправляйте только текстовые сообщения.",
+                        chat_id=message.chat.id,
+                        message_id=wizard_id,
+                        reply_markup=kb_wizard(0)
+                    )
+                except Exception:
+                    pass
             return
         
         # Фильтруем текст перед обработкой
@@ -446,11 +529,33 @@ async def main():
             pass
         
         if not nick:
-            await message.answer("❌ Никнейм содержит недопустимые символы. Используйте только буквы и цифры.")
+            # Редактируем существующее wizard сообщение с ошибкой
+            wizard_id = user_wizard_msg.get(message.from_user.id)
+            if wizard_id:
+                try:
+                    await bot.edit_message_text(
+                        text="❌ Никнейм содержит недопустимые символы. Используйте только буквы и цифры.",
+                        chat_id=message.chat.id,
+                        message_id=wizard_id,
+                        reply_markup=kb_wizard(0)
+                    )
+                except Exception:
+                    pass
             return
         
         if not validate_nickname(nick):
-            await message.answer(T["err_nick"])
+            # Редактируем существующее wizard сообщение с ошибкой
+            wizard_id = user_wizard_msg.get(message.from_user.id)
+            if wizard_id:
+                try:
+                    await bot.edit_message_text(
+                        text=T["err_nick"],
+                        chat_id=message.chat.id,
+                        message_id=wizard_id,
+                        reply_markup=kb_wizard(0)
+                    )
+                except Exception:
+                    pass
             return
         
         await state.update_data(nick=nick)
@@ -476,7 +581,18 @@ async def main():
                 await message.delete()
             except Exception:
                 pass
-            await message.answer("❌ Пожалуйста, отправляйте только текстовые сообщения.")
+            # Редактируем существующее wizard сообщение с ошибкой
+            wizard_id = user_wizard_msg.get(message.from_user.id)
+            if wizard_id:
+                try:
+                    await bot.edit_message_text(
+                        text="❌ Пожалуйста, отправляйте только текстовые сообщения.",
+                        chat_id=message.chat.id,
+                        message_id=wizard_id,
+                        reply_markup=kb_wizard(1)
+                    )
+                except Exception:
+                    pass
             return
         
         # Фильтруем текст перед обработкой
@@ -488,11 +604,33 @@ async def main():
             pass
         
         if not pwd:
-            await message.answer("❌ Пароль содержит недопустимые символы. Используйте только буквы, цифры и основные знаки препинания.")
+            # Редактируем существующее wizard сообщение с ошибкой
+            wizard_id = user_wizard_msg.get(message.from_user.id)
+            if wizard_id:
+                try:
+                    await bot.edit_message_text(
+                        text="❌ Пароль содержит недопустимые символы. Используйте только буквы, цифры и основные знаки препинания.",
+                        chat_id=message.chat.id,
+                        message_id=wizard_id,
+                        reply_markup=kb_wizard(1)
+                    )
+                except Exception:
+                    pass
             return
         
         if not validate_password(pwd):
-            await message.answer(T["err_pwd"])
+            # Редактируем существующее wizard сообщение с ошибкой
+            wizard_id = user_wizard_msg.get(message.from_user.id)
+            if wizard_id:
+                try:
+                    await bot.edit_message_text(
+                        text=T["err_pwd"],
+                        chat_id=message.chat.id,
+                        message_id=wizard_id,
+                        reply_markup=kb_wizard(1)
+                    )
+                except Exception:
+                    pass
             return
         
         await state.update_data(pwd=pwd)
@@ -518,7 +656,18 @@ async def main():
                 await message.delete()
             except Exception:
                 pass
-            await message.answer("❌ Пожалуйста, отправляйте только текстовые сообщения.")
+            # Редактируем существующее wizard сообщение с ошибкой
+            wizard_id = user_wizard_msg.get(message.from_user.id)
+            if wizard_id:
+                try:
+                    await bot.edit_message_text(
+                        text="❌ Пожалуйста, отправляйте только текстовые сообщения.",
+                        chat_id=message.chat.id,
+                        message_id=wizard_id,
+                        reply_markup=kb_wizard(2)
+                    )
+                except Exception:
+                    pass
             return
         
         # Фильтруем текст перед обработкой (email может содержать @ и точку)
@@ -530,13 +679,35 @@ async def main():
             pass
         
         if not email:
-            await message.answer("❌ E-mail содержит недопустимые символы.")
+            # Редактируем существующее wizard сообщение с ошибкой
+            wizard_id = user_wizard_msg.get(message.from_user.id)
+            if wizard_id:
+                try:
+                    await bot.edit_message_text(
+                        text="❌ E-mail содержит недопустимые символы.",
+                        chat_id=message.chat.id,
+                        message_id=wizard_id,
+                        reply_markup=kb_wizard(2)
+                    )
+                except Exception:
+                    pass
             return
         
         # Строгая валидация email с проверкой известных провайдеров
         is_valid, error_msg = validate_email(email, strict=True)
         if not is_valid:
-            await message.answer(f"❌ {error_msg}\n\n{T['err_mail']}")
+            # Редактируем существующее wizard сообщение с ошибкой
+            wizard_id = user_wizard_msg.get(message.from_user.id)
+            if wizard_id:
+                try:
+                    await bot.edit_message_text(
+                        text=f"❌ {error_msg}\n\n{T['err_mail']}",
+                        chat_id=message.chat.id,
+                        message_id=wizard_id,
+                        reply_markup=kb_wizard(2)
+                    )
+                except Exception:
+                    pass
             return
         
         data = await state.get_data()
@@ -550,22 +721,28 @@ async def main():
             else:
                 final_text = T[error].format(max_accounts=CONFIG["settings"]["max_accounts_per_user"])
             
+            # Удаляем старое wizard сообщение перед созданием нового меню (как в /start)
             wizard_msg_id = user_wizard_msg.pop(message.from_user.id, None)
             if wizard_msg_id:
                 try:
-                    await bot.edit_message_text(
-                        text=final_text,
-                        chat_id=message.chat.id,
-                        message_id=wizard_msg_id,
-                        reply_markup=kb_main(is_admin=message.from_user.id == ADMIN_ID)
-                    )
-                    return
-                except TelegramBadRequest:
+                    await bot.delete_message(message.chat.id, wizard_msg_id)
+                except Exception:
                     pass
-            await message.answer(final_text, reply_markup=kb_main(is_admin=message.from_user.id == ADMIN_ID))
+            
+            # Создаем новое сообщение меню
+            await render_main_menu(message.chat.id, message.from_user.id)
         except Exception as e:
             logger.error(f"Ошибка регистрации: {e}")
-            await message.answer(T["err_exists"], reply_markup=kb_main(is_admin=message.from_user.id == ADMIN_ID))
+            await state.clear()
+            # Удаляем старое wizard сообщение перед созданием нового меню
+            wizard_msg_id = user_wizard_msg.pop(message.from_user.id, None)
+            if wizard_msg_id:
+                try:
+                    await bot.delete_message(message.chat.id, wizard_msg_id)
+                except Exception:
+                    pass
+            # Создаем новое сообщение меню
+            await render_main_menu(message.chat.id, message.from_user.id)
 
     # ==================== АДМИН ПАНЕЛЬ ====================
     
@@ -605,31 +782,84 @@ async def main():
                 await message.delete()
             except Exception:
                 pass
-            await message.answer("❌ Пожалуйста, отправляйте только текстовые сообщения.")
+            # Редактируем существующее сообщение админ панели с ошибкой
+            admin_id = admin_menu_msgs.get(message.from_user.id)
+            if admin_id:
+                try:
+                    await bot.edit_message_text(
+                        text="❌ Пожалуйста, отправляйте только текстовые сообщения.",
+                        chat_id=message.chat.id,
+                        message_id=admin_id,
+                        reply_markup=kb_admin_back()
+                    )
+                except Exception:
+                    pass
             return
         
         # Фильтруем текст перед обработкой (email может содержать @ и точку)
         email = filter_text(message.text.strip(), max_length=100, allow_email_chars=True)
         
+        try:
+            await message.delete()
+        except Exception:
+            pass
+        
         if not email:
-            await message.answer("❌ E-mail содержит недопустимые символы.")
+            # Редактируем существующее сообщение админ панели с ошибкой
+            admin_id = admin_menu_msgs.get(message.from_user.id)
+            if admin_id:
+                try:
+                    await bot.edit_message_text(
+                        text="❌ E-mail содержит недопустимые символы.",
+                        chat_id=message.chat.id,
+                        message_id=admin_id,
+                        reply_markup=kb_admin_back()
+                    )
+                except Exception:
+                    pass
             return
         
         if not validate_email(email):
-            await message.answer("❌ Некорректный e-mail")
+            # Редактируем существующее сообщение админ панели с ошибкой
+            admin_id = admin_menu_msgs.get(message.from_user.id)
+            if admin_id:
+                try:
+                    await bot.edit_message_text(
+                        text="❌ Некорректный e-mail",
+                        chat_id=message.chat.id,
+                        message_id=admin_id,
+                        reply_markup=kb_admin_back()
+                    )
+                except Exception:
+                    pass
             return
         
         try:
             success = await admin_delete_account(pool, email)
             await state.clear()
             
-            if success:
-                await message.answer(T["admin_delete_success"].format(email=email), reply_markup=kb_admin())
-            else:
-                await message.answer(T["admin_delete_error"].format(error="Аккаунт не найден"), reply_markup=kb_admin())
+            # Удаляем старое сообщение админ панели перед созданием нового (как в /start)
+            old_admin_id = admin_menu_msgs.pop(message.from_user.id, None)
+            if old_admin_id:
+                try:
+                    await bot.delete_message(message.chat.id, old_admin_id)
+                except Exception:
+                    pass
+            
+            # Создаем новое сообщение админ панели
+            await render_admin_menu(message.chat.id, message.from_user.id)
         except Exception as e:
             logger.error(f"Ошибка админ удаления: {e}")
-            await message.answer(T["admin_delete_error"].format(error=str(e)), reply_markup=kb_admin())
+            await state.clear()
+            # Удаляем старое сообщение админ панели перед созданием нового
+            old_admin_id = admin_menu_msgs.pop(message.from_user.id, None)
+            if old_admin_id:
+                try:
+                    await bot.delete_message(message.chat.id, old_admin_id)
+                except Exception:
+                    pass
+            # Создаем новое сообщение админ панели
+            await render_admin_menu(message.chat.id, message.from_user.id)
 
     @dp.callback_query(F.data.in_(["admin_broadcast", "admin_reload_config"]))
     async def cb_admin_other_functions(callback: CallbackQuery):
@@ -644,34 +874,6 @@ async def main():
     @dp.callback_query(F.data == "admin_back")
     async def cb_admin_back(callback: CallbackQuery, state: FSMContext):
         await state.clear()
-        if callback.message:
-            try:
-                if callback.message.text:
-                    msg = await safe_edit_message(bot, callback, T["admin_panel"], reply_markup=kb_admin())
-                    admin_menu_msgs[callback.from_user.id] = msg.message_id
-                    return
-                if callback.message.caption:
-                    # Для сообщений с подписью используем edit_caption
-                    try:
-                        await bot.edit_message_caption(
-                            chat_id=callback.message.chat.id,
-                            message_id=callback.message.message_id,
-                            caption=T["admin_panel"],
-                            reply_markup=kb_admin()
-                        )
-                        admin_menu_msgs[callback.from_user.id] = callback.message.message_id
-                        return
-                    except TelegramBadRequest:
-                        # Если не получилось, отправляем новое сообщение
-                        pass
-            except Exception:
-                pass
-            try:
-                await callback.message.delete()
-            except Exception:
-                pass
-            if admin_menu_msgs.get(callback.from_user.id) == callback.message.message_id:
-                admin_menu_msgs.pop(callback.from_user.id, None)
         await render_admin_menu(callback.message.chat.id, callback.from_user.id, callback)
         # callback.answer() уже вызван в middleware
 
