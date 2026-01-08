@@ -28,7 +28,7 @@ from src.database.user_operations import (
 )
 from src.utils.middleware import RateLimit
 from src.utils.notifications import safe_edit_message
-from src.utils.validators import validate_email, validate_nickname, validate_password
+from src.utils.validators import validate_email, validate_nickname, validate_password, filter_text, is_text_only
 from src.keyboards.user_keyboards import kb_main, kb_back, kb_account_list
 from src.keyboards.admin_keyboards import kb_admin, kb_admin_back
 from src.states.user_states import RegistrationStates, ForgotPasswordStates, ChangePasswordStates, AdminStates
@@ -292,9 +292,23 @@ async def main():
 
     @dp.message(ChangePasswordStates.new_password)
     async def step_change_password(message: Message, state: FSMContext):
+        # Проверяем, что это текстовое сообщение
+        if not is_text_only(message) or not message.text:
+            try:
+                await message.delete()
+            except Exception:
+                pass
+            await message.answer("❌ Пожалуйста, отправляйте только текстовые сообщения.")
+            return
+        
         data = await state.get_data()
         email = data.get("email")
-        new_password = message.text.strip()
+        # Фильтруем текст перед обработкой
+        new_password = filter_text(message.text.strip(), max_length=100)
+        
+        if not new_password:
+            await message.answer("❌ Пароль содержит недопустимые символы. Используйте только буквы, цифры и основные знаки препинания.")
+            return
         
         if new_password in (T["to_main"], T["cancel"]):
             await state.clear()
@@ -375,12 +389,27 @@ async def main():
 
     @dp.message(RegistrationStates.nick)
     async def step_nick(message: Message, state: FSMContext):
-        nick = message.text.strip()
+        # Проверяем, что это текстовое сообщение
+        if not is_text_only(message) or not message.text:
+            try:
+                await message.delete()
+            except Exception:
+                pass
+            await message.answer("❌ Пожалуйста, отправляйте только текстовые сообщения.")
+            return
+        
+        # Фильтруем текст перед обработкой
+        nick = filter_text(message.text.strip(), max_length=50)
         
         try:
             await message.delete()
         except Exception:
             pass
+        
+        if not nick:
+            await message.answer("❌ Никнейм содержит недопустимые символы. Используйте только буквы и цифры.")
+            return
+        
         if not validate_nickname(nick):
             await message.answer(T["err_nick"])
             return
@@ -402,12 +431,27 @@ async def main():
 
     @dp.message(RegistrationStates.pwd)
     async def step_pwd(message: Message, state: FSMContext):
-        pwd = message.text.strip()
+        # Проверяем, что это текстовое сообщение
+        if not is_text_only(message) or not message.text:
+            try:
+                await message.delete()
+            except Exception:
+                pass
+            await message.answer("❌ Пожалуйста, отправляйте только текстовые сообщения.")
+            return
+        
+        # Фильтруем текст перед обработкой
+        pwd = filter_text(message.text.strip(), max_length=100)
         
         try:
             await message.delete()
         except Exception:
             pass
+        
+        if not pwd:
+            await message.answer("❌ Пароль содержит недопустимые символы. Используйте только буквы, цифры и основные знаки препинания.")
+            return
+        
         if not validate_password(pwd):
             await message.answer(T["err_pwd"])
             return
@@ -429,12 +473,27 @@ async def main():
 
     @dp.message(RegistrationStates.mail)
     async def step_mail(message: Message, state: FSMContext):
-        email = message.text.strip()
+        # Проверяем, что это текстовое сообщение
+        if not is_text_only(message) or not message.text:
+            try:
+                await message.delete()
+            except Exception:
+                pass
+            await message.answer("❌ Пожалуйста, отправляйте только текстовые сообщения.")
+            return
+        
+        # Фильтруем текст перед обработкой (email может содержать @ и точку)
+        email = filter_text(message.text.strip(), max_length=100, allow_email_chars=True)
         
         try:
             await message.delete()
         except Exception:
             pass
+        
+        if not email:
+            await message.answer("❌ E-mail содержит недопустимые символы.")
+            return
+        
         if not validate_email(email):
             await message.answer(T["err_mail"])
             return
@@ -499,7 +558,21 @@ async def main():
 
     @dp.message(AdminStates.delete_account_input)
     async def step_admin_delete_account(message: Message, state: FSMContext):
-        email = message.text.strip()
+        # Проверяем, что это текстовое сообщение
+        if not is_text_only(message) or not message.text:
+            try:
+                await message.delete()
+            except Exception:
+                pass
+            await message.answer("❌ Пожалуйста, отправляйте только текстовые сообщения.")
+            return
+        
+        # Фильтруем текст перед обработкой (email может содержать @ и точку)
+        email = filter_text(message.text.strip(), max_length=100, allow_email_chars=True)
+        
+        if not email:
+            await message.answer("❌ E-mail содержит недопустимые символы.")
+            return
         
         if not validate_email(email):
             await message.answer("❌ Некорректный e-mail")
@@ -587,11 +660,14 @@ async def main():
         await callback.answer("🔧 Функция в разработке")
         logger.info(f"Необработанный callback: {callback.data}")
 
+    # Обработчик для блокировки нежелательных типов сообщений (файлы, стикеры и т.д.)
+    # Этот обработчик должен быть ПЕРЕД общим обработчиком handle_private_messages
     @dp.message(F.chat.type == ChatType.PRIVATE)
-    async def handle_private_messages(message: Message, state: FSMContext):
+    async def handle_non_text_messages(message: Message, state: FSMContext):
+        """Блокирует файлы, стикеры, эмодзи и другие нежелательные типы сообщений"""
         current_state = await state.get_state()
         
-        # Пропускаем сообщения в состояниях FSM
+        # Пропускаем сообщения в состояниях FSM (они обрабатываются отдельно)
         if current_state in (
             RegistrationStates.nick.state,
             RegistrationStates.pwd.state,
@@ -599,9 +675,59 @@ async def main():
             ChangePasswordStates.new_password.state,
             AdminStates.delete_account_input.state
         ):
+            # В FSM состояниях тоже блокируем нежелательные типы
+            if not is_text_only(message):
+                try:
+                    await message.delete()
+                except Exception:
+                    pass
+                await message.answer(
+                    "❌ Пожалуйста, отправляйте только текстовые сообщения.\n"
+                    "Файлы, стикеры, эмодзи и другие типы сообщений не поддерживаются.",
+                    reply_markup=kb_main(is_admin=message.from_user.id == ADMIN_ID)
+                )
             return
         
-        if not message.text.startswith("/"):
+        # Блокируем все нежелательные типы сообщений (кроме команд)
+        if not is_text_only(message):
+            # Команды обрабатываются отдельно, пропускаем их
+            if message.text and message.text.startswith("/"):
+                return
+            try:
+                await message.delete()
+            except Exception:
+                pass
+            await message.answer(
+                "❌ Пожалуйста, отправляйте только текстовые сообщения.\n"
+                "Файлы, стикеры, эмодзи и другие типы сообщений не поддерживаются.",
+                reply_markup=kb_main(is_admin=message.from_user.id == ADMIN_ID)
+            )
+            return
+        
+        # Если это текстовое сообщение, но не команда - обрабатываем дальше
+        if message.text and not message.text.startswith("/"):
+            current_state = await state.get_state()
+            
+            # Пропускаем сообщения в состояниях FSM (они обрабатываются отдельными обработчиками)
+            if current_state in (
+                RegistrationStates.nick.state,
+                RegistrationStates.pwd.state,
+                RegistrationStates.mail.state,
+                ChangePasswordStates.new_password.state,
+                AdminStates.delete_account_input.state
+            ):
+                return
+            
+            # Фильтруем текст
+            filtered_text = filter_text(message.text)
+            if not filtered_text:
+                await message.answer(
+                    "❌ Сообщение содержит только недопустимые символы.\n"
+                    "Пожалуйста, используйте только буквы, цифры и основные знаки препинания.",
+                    reply_markup=kb_main(is_admin=message.from_user.id == ADMIN_ID)
+                )
+                return
+            
             await message.answer("❓ Используйте меню или /start", reply_markup=kb_main(is_admin=message.from_user.id == ADMIN_ID))
 
     logger.info("Все полнофункциональные обработчики зарегистрированы")
