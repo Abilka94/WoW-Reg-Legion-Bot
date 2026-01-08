@@ -20,7 +20,7 @@ def register_message_handlers(dp, pool, bot_instance):
     async def handle_private_messages(m: Message, state: FSMContext):
         current_state = await state.get_state()
         
-        # Пропускаем сообщения в состояниях FSM
+        # Пропускаем сообщения в состояниях FSM (регистрация и другие процессы)
         if current_state in (
             RegistrationStates.nick.state,
             RegistrationStates.pwd.state,
@@ -32,10 +32,15 @@ def register_message_handlers(dp, pool, bot_instance):
         ):
             return
         
+        # Игнорируем команды (они обрабатываются отдельно)
+        if m.text and m.text.startswith("/"):
+            return
+        
+        # Вне процесса регистрации - удаляем все текстовые сообщения как невалидные
         await delete_user_message(m)
         
-        # Игнорируем команды (они обрабатываются отдельно)
-        if not m.text.startswith("/"):
+        # Отправляем сообщение пользователю
+        if m.text:
             msg = await m.answer("❓ Используйте меню или /start", reply_markup=kb_main())
             record_message(m.from_user.id, msg, "command")
 

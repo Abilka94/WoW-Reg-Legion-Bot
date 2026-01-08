@@ -720,6 +720,12 @@ async def main():
             ):
                 return
             
+            # Вне процесса регистрации - удаляем все текстовые сообщения как невалидные
+            try:
+                await message.delete()
+            except Exception:
+                pass
+            
             # Фильтруем текст
             filtered_text = filter_text(message.text)
             if not filtered_text:
