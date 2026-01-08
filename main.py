@@ -171,6 +171,16 @@ async def main():
             await message.delete()
         except Exception:
             pass
+        
+        # Удаляем старое сообщение меню, если оно существует, чтобы не накапливались
+        old_msg_id = main_menu_msgs.get(message.from_user.id)
+        if old_msg_id:
+            try:
+                await bot.delete_message(message.chat.id, old_msg_id)
+            except Exception:
+                pass
+            main_menu_msgs.pop(message.from_user.id, None)
+        
         await render_main_menu(message.chat.id, message.from_user.id)
         logger.info(f"Команда /start от пользователя {message.from_user.id}")
 
