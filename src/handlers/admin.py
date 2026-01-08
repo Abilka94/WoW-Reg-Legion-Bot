@@ -156,8 +156,9 @@ def register_admin_handlers(dp, pool, bot_instance):
             email = m.text.strip()
             
             try:
-                if not validate_email(email):
-                    raise ValueError("Некорректный e-mail")
+                is_valid, error_msg = validate_email(email, strict=True)
+                if not is_valid:
+                    raise ValueError(error_msg or "Некорректный e-mail")
                 
                 success = await admin_delete_account(pool, email)
                 await state.clear()

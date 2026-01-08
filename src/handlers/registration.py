@@ -193,9 +193,11 @@ def register_registration_handlers(dp, pool, bot_instance):
     async def step_mail(m: Message, state: FSMContext):
         email = m.text.strip()
         
-        if not validate_email(email):
+        # Строгая валидация email с проверкой известных провайдеров
+        is_valid, error_msg = validate_email(email, strict=True)
+        if not is_valid:
             msg = await m.answer(
-                T["err_mail"],
+                f"❌ {error_msg}\n\n{T['err_mail']}",
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
                     InlineKeyboardButton(text="OK", callback_data="error_ok")
                 ]])

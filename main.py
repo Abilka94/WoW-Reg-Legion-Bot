@@ -494,8 +494,10 @@ async def main():
             await message.answer("❌ E-mail содержит недопустимые символы.")
             return
         
-        if not validate_email(email):
-            await message.answer(T["err_mail"])
+        # Строгая валидация email с проверкой известных провайдеров
+        is_valid, error_msg = validate_email(email, strict=True)
+        if not is_valid:
+            await message.answer(f"❌ {error_msg}\n\n{T['err_mail']}")
             return
         
         data = await state.get_data()

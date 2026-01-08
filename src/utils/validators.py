@@ -2,13 +2,104 @@
 Утилиты для валидации данных
 """
 import re
+from .email_providers import KNOWN_EMAIL_PROVIDERS
 
-# Регулярное выражение для проверки email
-EMAIL_RE = re.compile(r"^[\w\.-]+@[\w\.-]+\.\w+$")
+# Более строгое регулярное выражение для проверки email
+# Проверяет: локальная часть (до @) и домен (после @)
+EMAIL_RE = re.compile(r"^[a-zA-Z0-9]([a-zA-Z0-9._-]*[a-zA-Z0-9])?@[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?\.[a-zA-Z]{2,}$")
 
-def validate_email(email):
-    """Проверяет корректность email"""
-    return EMAIL_RE.fullmatch(email) is not None
+def validate_email(email: str, strict: bool = True) -> tuple[bool, str]:
+    """
+    Проверяет корректность email с проверкой известных провайдеров
+    
+    Args:
+        email: Email адрес для проверки
+        strict: Если True, проверяет наличие известного провайдера
+    
+    Returns:
+        Кортеж (is_valid, error_message)
+        is_valid: True если email валиден, False иначе
+        error_message: Сообщение об ошибке (пустая строка если валиден)
+    """
+    if not email:
+        return False, "Email не может быть пустым"
+    
+    # Нормализуем email (приводим к нижнему регистру, убираем пробелы)
+    email = email.strip().lower()
+    
+    # Проверка базового формата
+    if not EMAIL_RE.fullmatch(email):
+        return False, "Некорректный формат email адреса"
+    
+    # Проверка длины
+    if len(email) > 254:  # RFC 5321 максимальная длина
+        return False, "Email слишком длинный (максимум 254 символа)"
+    
+    if len(email) < 5:  # Минимум: a@b.c
+        return False, "Email слишком короткий"
+    
+    # Разделяем на локальную часть и домен
+    try:
+        local_part, domain = email.split('@', 1)
+    except ValueError:
+        return False, "Email должен содержать символ @"
+    
+    # Проверка локальной части
+    if len(local_part) > 64:  # RFC 5321 максимальная длина локальной части
+        return False, "Локальная часть email слишком длинная (максимум 64 символа)"
+    
+    if len(local_part) == 0:
+        return False, "Локальная часть email не может быть пустой"
+    
+    # Проверка на запрещенные символы в начале/конце локальной части
+    if local_part.startswith('.') or local_part.endswith('.'):
+        return False, "Локальная часть не может начинаться или заканчиваться точкой"
+    
+    if '..' in local_part:
+        return False, "Локальная часть не может содержать две точки подряд"
+    
+    # Проверка домена
+    if len(domain) > 253:  # RFC 5321 максимальная длина домена
+        return False, "Домен слишком длинный (максимум 253 символа)"
+    
+    if len(domain) < 4:  # Минимум: a.b
+        return False, "Домен слишком короткий"
+    
+    # Проверка на запрещенные символы в домене
+    if domain.startswith('.') or domain.endswith('.'):
+        return False, "Домен не может начинаться или заканчиваться точкой"
+    
+    if '..' in domain:
+        return False, "Домен не может содержать две точки подряд"
+    
+    # Проверка TLD (должен быть минимум 2 символа)
+    domain_parts = domain.split('.')
+    if len(domain_parts) < 2:
+        return False, "Домен должен содержать как минимум одну точку"
+    
+    tld = domain_parts[-1]
+    if len(tld) < 2:
+        return False, "Доменная зона должна содержать минимум 2 символа"
+    
+    # Строгая проверка: домен должен быть в списке известных провайдеров
+    if strict:
+        if domain not in KNOWN_EMAIL_PROVIDERS:
+            return False, f"Используйте email от известного почтового провайдера. Домен '{domain}' не поддерживается."
+    
+    return True, ""
+
+def validate_email_simple(email: str) -> bool:
+    """
+    Простая проверка email (для обратной совместимости)
+    
+    Args:
+        email: Email адрес для проверки
+    
+    Returns:
+        True если email валиден, False иначе
+    """
+    is_valid, _ = validate_email(email, strict=False)
+    return is_valid
 
 def validate_nickname(nick):
     """Проверяет корректность никнейма (только латинские буквы и цифры)"""
