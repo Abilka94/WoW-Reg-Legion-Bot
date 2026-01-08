@@ -162,8 +162,14 @@ async def delete_account(pool, telegram_id, email):
                 logger.warning(f"Попытка удаления неподходящего аккаунта: telegram_id={telegram_id}, email={mu}")
                 return False
             
+            # Получаем ID аккаунта для удаления account_access
+            await cur.execute("SELECT id FROM account WHERE email=%s", (mu,))
+            account_row = await cur.fetchone()
+            if account_row:
+                account_id = account_row[0]
+                await cur.execute("DELETE FROM account_access WHERE id=%s", (account_id,))
+            
             # Удаление записей
-            await cur.execute("DELETE FROM account_access WHERE id IN (SELECT id FROM account WHERE email=%s)", (mu,))
             await cur.execute("DELETE FROM account WHERE email=%s", (mu,))
             await cur.execute("DELETE FROM battlenet_accounts WHERE email=%s", (mu,))
             await cur.execute("DELETE FROM users WHERE telegram_id=%s AND email=%s", (telegram_id, mu))
@@ -180,7 +186,13 @@ async def admin_delete_account(pool, email):
     mu = email.upper()
     async with pool.acquire() as conn:
         async with conn.cursor() as cur:
-            await cur.execute("DELETE FROM account_access WHERE id IN (SELECT id FROM account WHERE email=%s)", (mu,))
+            # Получаем ID аккаунта для удаления account_access
+            await cur.execute("SELECT id FROM account WHERE email=%s", (mu,))
+            account_row = await cur.fetchone()
+            if account_row:
+                account_id = account_row[0]
+                await cur.execute("DELETE FROM account_access WHERE id=%s", (account_id,))
+            
             await cur.execute("DELETE FROM account WHERE email=%s", (mu,))
             await cur.execute("DELETE FROM battlenet_accounts WHERE email=%s", (mu,))
             await cur.execute("DELETE FROM users WHERE email=%s", (mu,))

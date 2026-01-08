@@ -53,8 +53,8 @@ def kb_account_list(accounts, selected_email=None):
     if selected_email:
         if CONFIG["features"]["account_management"]:
             buttons.append([InlineKeyboardButton(text=T["menu_fgt"], callback_data=f"reset_password_{selected_email}")])
-            buttons.append([InlineKeyboardButton(text=T["change_password_prompt"], callback_data="change_password")])
-            buttons.append([InlineKeyboardButton(text=T["delete_account_prompt"], callback_data=f"delete_account_{selected_email}")])
+            buttons.append([InlineKeyboardButton(text="🔄 Сменить пароль", callback_data="change_password")])
+            buttons.append([InlineKeyboardButton(text="🗑 Удалить аккаунт", callback_data=f"delete_account_{selected_email}")])
     
     buttons.append([InlineKeyboardButton(text=T["to_main"], callback_data="back_to_main")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)

@@ -27,8 +27,9 @@ from src.database.user_operations import (
     register_user, reset_password, change_password
 )
 from src.utils.middleware import RateLimit
+from src.utils.notifications import safe_edit_message
 from src.utils.validators import validate_email, validate_nickname, validate_password
-from src.keyboards.user_keyboards import kb_main, kb_back
+from src.keyboards.user_keyboards import kb_main, kb_back, kb_account_list
 from src.keyboards.admin_keyboards import kb_admin, kb_admin_back
 from src.states.user_states import RegistrationStates, ForgotPasswordStates, ChangePasswordStates, AdminStates
 
@@ -60,21 +61,6 @@ def setup_logging():
 user_wizard_msg = {}
 main_menu_msgs = {}
 admin_menu_msgs = {}
-
-def kb_account_list(accounts, selected_email=None):
-    """Создаём клавиатуру для списка аккаунтов"""
-    buttons = []
-    
-    for email, username, is_temp, temp_password in accounts:
-        text = f"📧 {email} {'✅' if email == selected_email else ''}"
-        buttons.append([InlineKeyboardButton(text=text, callback_data=f"select_account_{email}")])
-    
-    if selected_email:
-        buttons.append([InlineKeyboardButton(text="🔄 Сменить пароль", callback_data="change_password")])
-        buttons.append([InlineKeyboardButton(text="🗑 Удалить аккаунт", callback_data=f"delete_account_{selected_email}")])
-    
-    buttons.append([InlineKeyboardButton(text=T["to_main"], callback_data="back_to_main")])
-    return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 def kb_wizard(step):
     """Клавиатура для мастера регистрации"""
@@ -109,28 +95,28 @@ async def main():
     # Создание диспетчера
     dp = Dispatcher(storage=storage) if storage else Dispatcher()
     
-    async def render_main_menu(chat_id: int, user_id: int):
+    async def render_main_menu(chat_id: int, user_id: int, callback_or_message=None):
         kb = kb_main(is_admin=user_id == ADMIN_ID)
         msg_id = main_menu_msgs.get(user_id)
-        if msg_id:
+        if msg_id and callback_or_message:
             try:
-                msg = await bot.edit_message_text(T["start"], chat_id=chat_id, message_id=msg_id, reply_markup=kb)
+                msg = await safe_edit_message(bot, callback_or_message, T["start"], reply_markup=kb)
                 main_menu_msgs[user_id] = msg.message_id
                 return msg
-            except TelegramBadRequest:
+            except Exception:
                 main_menu_msgs.pop(user_id, None)
         msg = await bot.send_message(chat_id, T["start"], reply_markup=kb)
         main_menu_msgs[user_id] = msg.message_id
         return msg
 
-    async def render_admin_menu(chat_id: int, user_id: int):
+    async def render_admin_menu(chat_id: int, user_id: int, callback_or_message=None):
         msg_id = admin_menu_msgs.get(user_id)
-        if msg_id:
+        if msg_id and callback_or_message:
             try:
-                msg = await bot.edit_message_text(T["admin_panel"], chat_id=chat_id, message_id=msg_id, reply_markup=kb_admin())
+                msg = await safe_edit_message(bot, callback_or_message, T["admin_panel"], reply_markup=kb_admin())
                 admin_menu_msgs[user_id] = msg.message_id
                 return msg
-            except TelegramBadRequest:
+            except Exception:
                 try:
                     await bot.delete_message(chat_id, msg_id)
                 except Exception:
@@ -190,8 +176,8 @@ async def main():
     @dp.callback_query(F.data == "back_to_main")
     async def cb_back_main(callback: CallbackQuery, state: FSMContext):
         await state.clear()
-        await state.clear()
-        await render_main_menu(callback.message.chat.id, callback.from_user.id)
+        await render_main_menu(callback.message.chat.id, callback.from_user.id, callback)
+        await callback.answer()
     @dp.callback_query(F.data == "show_info")
     async def cb_show_info(callback: CallbackQuery, state: FSMContext):
         await state.clear()
@@ -203,7 +189,8 @@ async def main():
             text = "📋 Информация о подключении:\n\n" + \
                    "🔗 Для получения данных подключения к серверу обратитесь к администратору."
         
-        await callback.message.edit_text(text, reply_markup=kb_back())
+        await safe_edit_message(bot, callback, text, reply_markup=kb_back())
+        await callback.answer()
 
     @dp.callback_query(F.data == "show_news")
     async def cb_show_news(callback: CallbackQuery, state: FSMContext):
@@ -216,7 +203,8 @@ async def main():
             text = "📰 Новости сервера:\n\n" + \
                    "В данный момент новостей нет.\nСледите за обновлениями!"
         
-        await callback.message.edit_text(text, reply_markup=kb_back())
+        await safe_edit_message(bot, callback, text, reply_markup=kb_back())
+        await callback.answer()
 
     # ==================== УПРАВЛЕНИЕ АККАУНТАМИ ====================
     
@@ -235,7 +223,8 @@ async def main():
         else:
             text = T["select_account_prompt"]
         
-        await callback.message.edit_text(text, reply_markup=kb_account_list(accounts) if accounts else kb_back())
+        await safe_edit_message(bot, callback, text, reply_markup=kb_account_list(accounts) if accounts else kb_back())
+        await callback.answer()
         logger.info(f"Просмотр аккаунтов пользователем {callback.from_user.id}")
 
     @dp.callback_query(F.data.startswith("select_account_"))
@@ -245,8 +234,7 @@ async def main():
         accounts = await get_account_info(pool, callback.from_user.id)
         
         if not accounts:
-            await callback.message.edit_text(T["account_no_account"], reply_markup=kb_back())
-            await callback.answer()
+            await safe_edit_message(bot, callback, T["account_no_account"], reply_markup=kb_back())
             return
         
         selected = next((acc for acc in accounts if acc[0] == email), None)
@@ -258,7 +246,8 @@ async def main():
         pwd_status = f"🔄 Временный пароль: {temp_password}" if is_temp else "✅ Постоянный пароль"
         text = f"🔑 Ваш аккаунт:\nЛогин: <code>{username}</code>\nE-mail: <code>{email}</code>\nСтатус: {pwd_status}"
         
-        await callback.message.edit_text(text, reply_markup=kb_account_list(accounts, selected_email=email))
+        await safe_edit_message(bot, callback, text, reply_markup=kb_account_list(accounts, selected_email=email))
+        await callback.answer()
 
     @dp.callback_query(F.data.startswith("reset_password_"))
     async def cb_reset_password(callback: CallbackQuery, state: FSMContext):
@@ -276,10 +265,7 @@ async def main():
             await callback.answer(T["reset_err_not_found"], show_alert=True)
             return
         text_msg = T["reset_success"].format(password=tmp)
-        try:
-            await callback.message.edit_text(text_msg, reply_markup=kb_account_list(accounts, selected_email=email))
-        except TelegramBadRequest:
-            await callback.message.answer(text_msg, reply_markup=kb_account_list(accounts, selected_email=email))
+        await safe_edit_message(bot, callback, text_msg, reply_markup=kb_account_list(accounts, selected_email=email))
         await callback.answer()
 
     @dp.callback_query(F.data == "change_password")
@@ -335,12 +321,13 @@ async def main():
         try:
             success = await delete_account(pool, callback.from_user.id, email)
             if success:
-                await callback.message.edit_text(T["delete_account_success"], reply_markup=kb_back())
+                await safe_edit_message(bot, callback, T["delete_account_success"], reply_markup=kb_back())
             else:
-                await callback.message.edit_text(T["delete_account_error"], reply_markup=kb_back())
+                await safe_edit_message(bot, callback, T["delete_account_error"], reply_markup=kb_back())
         except Exception as e:
             logger.error(f"Ошибка удаления аккаунта: {e}")
-            await callback.message.edit_text("❌ Ошибка при удалении аккаунта", reply_markup=kb_back())
+            await safe_edit_message(bot, callback, "❌ Ошибка при удалении аккаунта", reply_markup=kb_back())
+        await callback.answer()
         
 
     # ==================== РЕГИСТРАЦИЯ ====================
@@ -365,22 +352,25 @@ async def main():
         
         if callback.data == "wiz_cancel":
             await state.clear()
-            await render_main_menu(callback.message.chat.id, callback.from_user.id)
+            await render_main_menu(callback.message.chat.id, callback.from_user.id, callback)
             await callback.answer()
             return
         
         # Обработка wiz_back
         if current_state == RegistrationStates.nick.state:
             await state.clear()
-            await render_main_menu(callback.message.chat.id, callback.from_user.id)
+            await render_main_menu(callback.message.chat.id, callback.from_user.id, callback)
+            await callback.answer()
         elif current_state == RegistrationStates.pwd.state:
             await state.set_state(RegistrationStates.nick)
             text = f"1/3 · {T['progress'][0]}"
-            await callback.message.edit_text(text, reply_markup=kb_wizard(0))
+            await safe_edit_message(bot, callback, text, reply_markup=kb_wizard(0))
+            await callback.answer()
         elif current_state == RegistrationStates.mail.state:
             await state.set_state(RegistrationStates.pwd)
             text = f"2/3 · {T['progress'][1]}"
-            await callback.message.edit_text(text, reply_markup=kb_wizard(1))
+            await safe_edit_message(bot, callback, text, reply_markup=kb_wizard(1))
+            await callback.answer()
         
 
     @dp.message(RegistrationStates.nick)
@@ -494,7 +484,8 @@ async def main():
         else:
             text = "❌ База данных не подключена"
             
-        await callback.message.edit_text(text, reply_markup=kb_admin_back())
+        await safe_edit_message(bot, callback, text, reply_markup=kb_admin_back())
+        await callback.answer()
 
     @dp.callback_query(F.data == "admin_delete_account")
     async def cb_admin_delete_account(callback: CallbackQuery, state: FSMContext):
@@ -503,7 +494,8 @@ async def main():
             return
         
         await state.set_state(AdminStates.delete_account_input)
-        await callback.message.edit_text(T["admin_delete_prompt"], reply_markup=kb_admin_back())
+        await safe_edit_message(bot, callback, T["admin_delete_prompt"], reply_markup=kb_admin_back())
+        await callback.answer()
 
     @dp.message(AdminStates.delete_account_input)
     async def step_admin_delete_account(message: Message, state: FSMContext):
@@ -541,16 +533,24 @@ async def main():
         if callback.message:
             try:
                 if callback.message.text:
-                    await callback.message.edit_text(T["admin_panel"], reply_markup=kb_admin())
-                    admin_menu_msgs[callback.from_user.id] = callback.message.message_id
-                    await callback.answer()
+                    msg = await safe_edit_message(bot, callback, T["admin_panel"], reply_markup=kb_admin())
+                    admin_menu_msgs[callback.from_user.id] = msg.message_id
                     return
                 if callback.message.caption:
-                    await callback.message.edit_caption(T["admin_panel"], reply_markup=kb_admin())
-                    admin_menu_msgs[callback.from_user.id] = callback.message.message_id
-                    await callback.answer()
-                    return
-            except TelegramBadRequest:
+                    # Для сообщений с подписью используем edit_caption
+                    try:
+                        await bot.edit_message_caption(
+                            chat_id=callback.message.chat.id,
+                            message_id=callback.message.message_id,
+                            caption=T["admin_panel"],
+                            reply_markup=kb_admin()
+                        )
+                        admin_menu_msgs[callback.from_user.id] = callback.message.message_id
+                        return
+                    except TelegramBadRequest:
+                        # Если не получилось, отправляем новое сообщение
+                        pass
+            except Exception:
                 pass
             try:
                 await callback.message.delete()
@@ -558,18 +558,17 @@ async def main():
                 pass
             if admin_menu_msgs.get(callback.from_user.id) == callback.message.message_id:
                 admin_menu_msgs.pop(callback.from_user.id, None)
-        if callback.message:
-            admin_menu_msgs[callback.from_user.id] = callback.message.message_id
-        await render_admin_menu(callback.message.chat.id, callback.from_user.id)
+        await render_admin_menu(callback.message.chat.id, callback.from_user.id, callback)
+        await callback.answer()
 
 
-    @dp.callback_query(F.data == "admin_main")
     @dp.callback_query(F.data == "admin_main")
     async def cb_admin_main(callback: CallbackQuery, state: FSMContext):
         await state.clear()
         if callback.message:
             main_menu_msgs[callback.from_user.id] = callback.message.message_id
-        await render_main_menu(callback.message.chat.id, callback.from_user.id)
+        await render_main_menu(callback.message.chat.id, callback.from_user.id, callback)
+        await callback.answer()
 
     @dp.callback_query(F.data == "open_admin_panel")
     async def cb_open_admin_panel(callback: CallbackQuery, state: FSMContext):
@@ -579,9 +578,8 @@ async def main():
             return
         if callback.message:
             admin_menu_msgs[callback.from_user.id] = callback.message.message_id
-        if callback.message:
-            admin_menu_msgs[callback.from_user.id] = callback.message.message_id
-        await render_admin_menu(callback.message.chat.id, callback.from_user.id)
+        await render_admin_menu(callback.message.chat.id, callback.from_user.id, callback)
+        await callback.answer()
 
 
     @dp.callback_query()

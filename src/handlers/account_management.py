@@ -95,7 +95,7 @@ def register_account_handlers(dp, pool, bot_instance):
             email = c.data.replace("reset_password_", "")
             accounts = await get_account_info(pool, c.from_user.id)
             if not any(acc[0] == email for acc in accounts):
-                await c.answer("❌ ??????? ?? ??????", show_alert=True)
+                await c.answer("❌ Нет доступа", show_alert=True)
                 return
 
             tmp = await reset_password(pool, email)
