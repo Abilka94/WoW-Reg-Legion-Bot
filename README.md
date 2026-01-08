@@ -1,6 +1,6 @@
 # 🎮 WoW Registration Bot - Modular Version
 
-![Version](https://img.shields.io/badge/version-1.5.0%2B40-blue)
+![Version](https://img.shields.io/badge/version-1.6.1-blue)
 ![Python](https://img.shields.io/badge/python-3.7%2B-green)
 ![License](https://img.shields.io/badge/license-MIT-yellow)
 ![Architecture](https://img.shields.io/badge/architecture-modular-orange)
