@@ -9,7 +9,7 @@ from aiogram.fsm.context import FSMContext
 
 from ..states.user_states import RegistrationStates, ForgotPasswordStates, ChangePasswordStates, AdminStates
 from ..keyboards.user_keyboards import kb_main
-from ..utils.notifications import record_message, delete_user_message
+from ..utils.notifications import record_message, delete_user_message, delete_all_bot_messages
 
 logger = logging.getLogger("bot")
 
@@ -38,6 +38,9 @@ def register_message_handlers(dp, pool, bot_instance):
         
         # Вне процесса регистрации - удаляем все текстовые сообщения как невалидные
         await delete_user_message(m)
+        
+        # Удаляем предыдущие ответы бота, чтобы не накапливались
+        await delete_all_bot_messages(m.from_user.id, bot_instance)
         
         # Отправляем сообщение пользователю
         if m.text:

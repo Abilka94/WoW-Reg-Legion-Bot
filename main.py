@@ -27,7 +27,7 @@ from src.database.user_operations import (
     register_user, reset_password, change_password
 )
 from src.utils.middleware import RateLimit
-from src.utils.notifications import safe_edit_message
+from src.utils.notifications import safe_edit_message, delete_all_bot_messages, record_message
 from src.utils.validators import validate_email, validate_nickname, validate_password, filter_text, is_text_only
 from src.keyboards.user_keyboards import kb_main, kb_back, kb_account_list
 from src.keyboards.admin_keyboards import kb_admin, kb_admin_back
@@ -683,11 +683,14 @@ async def main():
                     await message.delete()
                 except Exception:
                     pass
-                await message.answer(
+                # Удаляем предыдущие ответы бота, чтобы не накапливались
+                await delete_all_bot_messages(message.from_user.id, bot)
+                msg = await message.answer(
                     "❌ Пожалуйста, отправляйте только текстовые сообщения.\n"
                     "Файлы, стикеры, эмодзи и другие типы сообщений не поддерживаются.",
                     reply_markup=kb_main(is_admin=message.from_user.id == ADMIN_ID)
                 )
+                record_message(message.from_user.id, msg, "command")
             return
         
         # Блокируем все нежелательные типы сообщений (кроме команд)
@@ -699,11 +702,14 @@ async def main():
                 await message.delete()
             except Exception:
                 pass
-            await message.answer(
+            # Удаляем предыдущие ответы бота, чтобы не накапливались
+            await delete_all_bot_messages(message.from_user.id, bot)
+            msg = await message.answer(
                 "❌ Пожалуйста, отправляйте только текстовые сообщения.\n"
                 "Файлы, стикеры, эмодзи и другие типы сообщений не поддерживаются.",
                 reply_markup=kb_main(is_admin=message.from_user.id == ADMIN_ID)
             )
+            record_message(message.from_user.id, msg, "command")
             return
         
         # Если это текстовое сообщение, но не команда - обрабатываем дальше
@@ -726,17 +732,22 @@ async def main():
             except Exception:
                 pass
             
+            # Удаляем предыдущие ответы бота, чтобы не накапливались
+            await delete_all_bot_messages(message.from_user.id, bot)
+            
             # Фильтруем текст
             filtered_text = filter_text(message.text)
             if not filtered_text:
-                await message.answer(
+                msg = await message.answer(
                     "❌ Сообщение содержит только недопустимые символы.\n"
                     "Пожалуйста, используйте только буквы, цифры и основные знаки препинания.",
                     reply_markup=kb_main(is_admin=message.from_user.id == ADMIN_ID)
                 )
+                record_message(message.from_user.id, msg, "command")
                 return
             
-            await message.answer("❓ Используйте меню или /start", reply_markup=kb_main(is_admin=message.from_user.id == ADMIN_ID))
+            msg = await message.answer("❓ Используйте меню или /start", reply_markup=kb_main(is_admin=message.from_user.id == ADMIN_ID))
+            record_message(message.from_user.id, msg, "command")
 
     logger.info("Все полнофункциональные обработчики зарегистрированы")
     logger.info("Полнофункциональный бот запущен и готов к работе")
