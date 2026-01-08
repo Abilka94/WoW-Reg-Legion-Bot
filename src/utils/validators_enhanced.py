@@ -99,7 +99,7 @@ def _with_timeout(func, timeout: float = VALIDATION_TIMEOUT):
 @_with_timeout
 def validate_email_enhanced(email: str) -> ValidationResult:
     """
-    Enhanced email validation with comprehensive security checks.
+    Enhanced email validation with comprehensive security checks and provider validation.
     
     Args:
         email: Email address to validate
@@ -182,6 +182,21 @@ def validate_email_enhanced(email: str) -> ValidationResult:
     if len(domain_parts[-1]) < 2:
         result.add_error("Email top-level domain too short")
         return result
+    
+    # Проверка провайдера email
+    try:
+        from .email_providers import validate_email_provider, is_popular_provider
+        is_valid_provider, provider_error = validate_email_provider(email)
+        if not is_valid_provider:
+            result.add_error(provider_error or "Email провайдер не распознан")
+            return result
+        
+        # Если провайдер популярный - добавляем информацию
+        if is_popular_provider(email):
+            result.add_warning("")  # Пустое предупреждение, просто для информации
+    except ImportError:
+        # Если модуль не найден, пропускаем проверку провайдера
+        pass
     
     # Warn about potentially suspicious emails
     if '+' in local_part:
@@ -357,9 +372,20 @@ def validate_password_enhanced(password: str) -> ValidationResult:
 
 # Backward compatibility functions (return bool like original)
 def validate_email(email: str) -> bool:
-    """Backward compatible email validation function."""
+    """Backward compatible email validation function with provider check."""
     try:
-        return bool(validate_email_enhanced(email))
+        # Сначала базовая валидация
+        result = validate_email_enhanced(email)
+        if not result:
+            return False
+        
+        # Проверка провайдера
+        from .email_providers import validate_email_provider
+        is_valid_provider, error_msg = validate_email_provider(email)
+        if not is_valid_provider:
+            return False
+        
+        return True
     except Exception:
         return False
 

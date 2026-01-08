@@ -1,5 +1,5 @@
-﻿"""
-РћР±СЂР°Р±РѕС‚С‡РёРєРё СЂРµРіРёСЃС‚СЂР°С†РёРё
+"""
+Обработчики регистрации
 """
 import logging
 import pymysql
@@ -8,7 +8,7 @@ from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKe
 from aiogram.fsm.context import FSMContext
 from aiogram.exceptions import TelegramBadRequest
 
-from ..config.settings import CONFIG, BOT_VERSION
+from ..config.settings import CONFIG
 from ..config.translations import TRANSLATIONS as T
 from ..states.user_states import RegistrationStates
 from ..keyboards.user_keyboards import kb_main, kb_wizard
@@ -19,12 +19,12 @@ from ..database.user_operations import register_user
 logger = logging.getLogger("bot")
 
 def register_registration_handlers(dp, pool, bot_instance):
-    """Р РµРіРёСЃС‚СЂРёСЂСѓРµС‚ РѕР±СЂР°Р±РѕС‚С‡РёРєРё СЂРµРіРёСЃС‚СЂР°С†РёРё"""
+    """Регистрирует обработчики регистрации"""
     
     if not CONFIG["features"]["registration"]:
         return
     
-    # РҐСЂР°РЅРёР»РёС‰Рµ РґР»СЏ ID СЃРѕРѕР±С‰РµРЅРёР№ РјР°СЃС‚РµСЂР°
+    # Хранилище для ID сообщений мастера
     user_wizard_msg = {}
     
     @dp.callback_query(F.data == "reg_start")
@@ -34,20 +34,20 @@ def register_registration_handlers(dp, pool, bot_instance):
             return
         
         await state.clear()
-        await delete_all_bot_messages(c.from_user.id, bot_instance)
+        await delete_all_bot_messages(c.from_user.id)
         await state.set_state(RegistrationStates.nick)
-        text = f"1/3 - {T['progress'][0]}"
+        text = f"1/3 · {T['progress'][0]}"
         
         try:
             msg = await c.message.edit_text(text, reply_markup=kb_wizard(0))
         except:
-            bot = bot_instance
+            from ..main import bot
             msg = await bot.send_message(c.from_user.id, text, reply_markup=kb_wizard(0))
         
         user_wizard_msg[c.from_user.id] = msg.message_id
         record_message(c.from_user.id, msg, "conversation")
         await c.answer()
-        logger.info(f"РќР°С‡Р°Р»Рѕ СЂРµРіРёСЃС‚СЂР°С†РёРё РґР»СЏ user_id={c.from_user.id}, СЃРѕСЃС‚РѕСЏРЅРёРµ=RegistrationStates.nick")
+        logger.info(f"Начало регистрации для user_id={c.from_user.id}, состояние=RegistrationStates.nick")
 
     @dp.callback_query(F.data.in_(["wiz_back", "wiz_cancel"]))
     async def cb_wiz_nav(c: CallbackQuery, state: FSMContext):
@@ -59,29 +59,29 @@ def register_registration_handlers(dp, pool, bot_instance):
         
         if c.data == "wiz_cancel":
             await state.clear()
-            await delete_all_bot_messages(c.from_user.id, bot_instance)
-            bot = bot_instance
-            msg = await bot.send_message(c.from_user.id, T["start"].format(version=BOT_VERSION), reply_markup=kb_main())
+            await delete_all_bot_messages(c.from_user.id)
+            from ..main import bot
+            msg = await bot.send_message(c.from_user.id, T["start"], reply_markup=kb_main())
             record_message(c.from_user.id, msg, "command")
-            logger.info(f"Р РµРіРёСЃС‚СЂР°С†РёСЏ РѕС‚РјРµРЅРµРЅР° РґР»СЏ user_id={c.from_user.id}")
+            logger.info(f"Регистрация отменена для user_id={c.from_user.id}")
             await c.answer()
             return
         
         if cur == RegistrationStates.nick.state:
             await state.clear()
-            await delete_all_bot_messages(c.from_user.id, bot_instance)
-            bot = bot_instance
-            msg = await bot.send_message(c.from_user.id, T["start"].format(version=BOT_VERSION), reply_markup=kb_main())
+            await delete_all_bot_messages(c.from_user.id)
+            from ..main import bot
+            msg = await bot.send_message(c.from_user.id, T["start"], reply_markup=kb_main())
             record_message(c.from_user.id, msg, "command")
-            logger.info(f"Р’РѕР·РІСЂР°С‚ РІ РіР»Р°РІРЅРѕРµ РјРµРЅСЋ РёР· RegistrationStates.nick РґР»СЏ user_id={c.from_user.id}")
+            logger.info(f"Возврат в главное меню из RegistrationStates.nick для user_id={c.from_user.id}")
             await c.answer()
             return
         
         if cur == RegistrationStates.pwd.state:
             await state.set_state(RegistrationStates.nick)
-            text = f"1/3 - {T['progress'][0]}"
+            text = f"1/3 · {T['progress'][0]}"
             try:
-                bot = bot_instance
+                from ..main import bot
                 await bot.edit_message_text(
                     text=text,
                     chat_id=c.message.chat.id,
@@ -89,19 +89,19 @@ def register_registration_handlers(dp, pool, bot_instance):
                     reply_markup=kb_wizard(0)
                 )
             except:
-                bot = bot_instance
+                from ..main import bot
                 msg = await bot.send_message(c.from_user.id, text, reply_markup=kb_wizard(0))
                 user_wizard_msg[c.from_user.id] = msg.message_id
                 record_message(c.from_user.id, msg, "conversation")
-            logger.info(f"Р’РѕР·РІСЂР°С‚ Рє RegistrationStates.nick РґР»СЏ user_id={c.from_user.id}")
+            logger.info(f"Возврат к RegistrationStates.nick для user_id={c.from_user.id}")
             await c.answer()
             return
         
         if cur == RegistrationStates.mail.state:
             await state.set_state(RegistrationStates.pwd)
-            text = f"2/3 - {T['progress'][1]}"
+            text = f"2/3 · {T['progress'][1]}"
             try:
-                bot = bot_instance
+                from ..main import bot
                 await bot.edit_message_text(
                     text=text,
                     chat_id=c.message.chat.id,
@@ -109,11 +109,11 @@ def register_registration_handlers(dp, pool, bot_instance):
                     reply_markup=kb_wizard(1)
                 )
             except:
-                bot = bot_instance
+                from ..main import bot
                 msg = await bot.send_message(c.from_user.id, text, reply_markup=kb_wizard(1))
                 user_wizard_msg[c.from_user.id] = msg.message_id
                 record_message(c.from_user.id, msg, "conversation")
-            logger.info(f"Р’РѕР·РІСЂР°С‚ Рє RegistrationStates.pwd РґР»СЏ user_id={c.from_user.id}")
+            logger.info(f"Возврат к RegistrationStates.pwd для user_id={c.from_user.id}")
             await c.answer()
             return
 
@@ -134,10 +134,10 @@ def register_registration_handlers(dp, pool, bot_instance):
         
         await state.update_data(nick=nick)
         await state.set_state(RegistrationStates.pwd)
-        text = f"2/3 - {T['progress'][1]}"
+        text = f"2/3 · {T['progress'][1]}"
         
         try:
-            bot = bot_instance
+            from ..main import bot
             await bot.edit_message_text(
                 text=text,
                 chat_id=m.chat.id,
@@ -145,13 +145,13 @@ def register_registration_handlers(dp, pool, bot_instance):
                 reply_markup=kb_wizard(1)
             )
         except:
-            bot = bot_instance
+            from ..main import bot
             msg = await bot.send_message(m.from_user.id, text, reply_markup=kb_wizard(1))
             user_wizard_msg[m.from_user.id] = msg.message_id
             record_message(m.from_user.id, msg, "conversation")
         
         await delete_user_message(m)
-        logger.info(f"РџРµСЂРµС…РѕРґ Рє RegistrationStates.pwd РґР»СЏ user_id={m.from_user.id}")
+        logger.info(f"Переход к RegistrationStates.pwd для user_id={m.from_user.id}")
 
     @dp.message(RegistrationStates.pwd)
     async def step_pwd(m: Message, state: FSMContext):
@@ -170,10 +170,10 @@ def register_registration_handlers(dp, pool, bot_instance):
         
         await state.update_data(pwd=pwd)
         await state.set_state(RegistrationStates.mail)
-        text = f"3/3 - {T['progress'][2]}"
+        text = f"3/3 · {T['progress'][2]}"
         
         try:
-            bot = bot_instance
+            from ..main import bot
             await bot.edit_message_text(
                 text=text,
                 chat_id=m.chat.id,
@@ -181,13 +181,13 @@ def register_registration_handlers(dp, pool, bot_instance):
                 reply_markup=kb_wizard(2)
             )
         except:
-            bot = bot_instance
+            from ..main import bot
             msg = await bot.send_message(m.from_user.id, text, reply_markup=kb_wizard(2))
             user_wizard_msg[m.from_user.id] = msg.message_id
             record_message(m.from_user.id, msg, "conversation")
         
         await delete_user_message(m)
-        logger.info(f"РџРµСЂРµС…РѕРґ Рє RegistrationStates.mail РґР»СЏ user_id={m.from_user.id}")
+        logger.info(f"Переход к RegistrationStates.mail для user_id={m.from_user.id}")
 
     @dp.message(RegistrationStates.mail)
     async def step_mail(m: Message, state: FSMContext):
@@ -209,7 +209,7 @@ def register_registration_handlers(dp, pool, bot_instance):
         try:
             login, error = await register_user(pool, data["nick"], data["pwd"], email, m.from_user.id)
             await state.clear()
-            await delete_all_bot_messages(m.from_user.id, bot_instance)
+            await delete_all_bot_messages(m.from_user.id)
             
             if login:
                 msg = await m.answer(
@@ -223,13 +223,11 @@ def register_registration_handlers(dp, pool, bot_instance):
                 record_message(m.from_user.id, msg, "command")
         
         except pymysql.err.IntegrityError as e:
-            logger.error(f"РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°СЂРµРіРёСЃС‚СЂРёСЂРѕРІР°С‚СЊ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ СЃ e-mail {email}: {e}")
+            logger.error(f"Не удалось зарегистрировать пользователя с e-mail {email}: {e}")
             await state.clear()
-            await delete_all_bot_messages(m.from_user.id, bot_instance)
+            await delete_all_bot_messages(m.from_user.id)
             msg = await m.answer(T["err_exists"], reply_markup=kb_main())
             record_message(m.from_user.id, msg, "command")
         
         await delete_user_message(m)
-        logger.info(f"Р—Р°РІРµСЂС€РµРЅРёРµ СЂРµРіРёСЃС‚СЂР°С†РёРё РґР»СЏ user_id={m.from_user.id}, email={email}")
-
-
+        logger.info(f"Завершение регистрации для user_id={m.from_user.id}, email={email}")

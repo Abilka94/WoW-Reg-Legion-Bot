@@ -7,7 +7,7 @@ from aiogram.types import Message
 from aiogram.enums import ChatType
 from aiogram.fsm.context import FSMContext
 
-from ..states.user_states import RegistrationStates, ForgotPasswordStates, ChangePasswordStates, AdminStates, CurrencyShopStates
+from ..states.user_states import RegistrationStates, ForgotPasswordStates, ChangePasswordStates, AdminStates
 from ..keyboards.user_keyboards import kb_main
 from ..utils.notifications import record_message, delete_user_message
 
@@ -28,8 +28,7 @@ def register_message_handlers(dp, pool, bot_instance):
             ForgotPasswordStates.email.state,
             ChangePasswordStates.new_password.state,
             AdminStates.broadcast_text.state,
-            AdminStates.delete_account_input.state,
-            CurrencyShopStates.custom_amount.state
+            AdminStates.delete_account_input.state
         ):
             return
         
@@ -37,13 +36,11 @@ def register_message_handlers(dp, pool, bot_instance):
         
         # Игнорируем команды (они обрабатываются отдельно)
         if not m.text.startswith("/"):
-            from ..config.translations import TRANSLATIONS as T
-            msg = await m.answer(T["use_menu_or_start"], reply_markup=kb_main())
+            msg = await m.answer("❓ Используйте меню или /start", reply_markup=kb_main())
             record_message(m.from_user.id, msg, "command")
 
     @dp.message()
     async def unknown(m: Message):
         """Обработчик неизвестных сообщений"""
-        from ..config.translations import TRANSLATIONS as T
-        msg = await m.answer(T["use_menu_or_start"])
+        msg = await m.answer("❓ Используйте меню или /start")
         record_message(m.from_user.id, msg, "command")

@@ -1,6 +1,7 @@
 """
 Конфигурация и настройки бота
 """
+
 import os
 import json
 import logging
@@ -18,7 +19,7 @@ DB_USER = os.getenv("DB_USER", "spp_user")
 DB_PASS = os.getenv("DB_PASSWORD", "123456")
 DB_NAME = os.getenv("DB_NAME", "legion_auth")
 REDIS_DSN = os.getenv("REDIS_DSN", "redis://127.0.0.1:6379/0")
-BOT_VERSION = "1.5.0+41"
+BOT_VERSION = "1.6.0+41"
 
 # Конфигурация по умолчанию
 DEFAULT_CONFIG = {
@@ -29,23 +30,15 @@ DEFAULT_CONFIG = {
         "admin_panel": True,
         "admin_broadcast": True,
         "admin_check_db": True,
-        "admin_download_log": True,
         "admin_delete_account": True,
         "admin_reload_config": True,
-        "currency_shop": False
     },
-    "settings": {
-        "max_accounts_per_user": 3
-    },
-    "currency_shop": {
-        "enabled": False,
-        "balance_check": False,
-        "purchase": False
-    }
+    "settings": {"max_accounts_per_user": 3},
 }
 
 # Глобальная переменная конфигурации
 CONFIG = DEFAULT_CONFIG.copy()
+
 
 def load_config():
     """Загружает конфигурацию из config.json или возвращает значения по умолчанию."""
@@ -53,35 +46,44 @@ def load_config():
     try:
         if os.path.exists("config.json"):
             with open("config.json", encoding="utf-8") as f:
-                loaded_config = json.load(f)
-            # Полностью заменяем CONFIG
-            CONFIG.clear()
-            CONFIG.update(loaded_config)
+                CONFIG = json.load(f)
             logging.info("Конфигурация успешно загружена из config.json")
         else:
-            logging.warning("Файл config.json не найден, используются настройки по умолчанию")
+            logging.warning(
+                "Файл config.json не найден, используются настройки по умолчанию"
+            )
     except json.JSONDecodeError as e:
-        logging.error(f"Ошибка чтения config.json: {e}, используются настройки по умолчанию")
+        logging.error(
+            f"Ошибка чтения config.json: {e}, используются настройки по умолчанию"
+        )
     except Exception as e:
-        logging.error(f"Неизвестная ошибка при загрузке config.json: {e}, используются настройки по умолчанию")
+        logging.error(
+            f"Неизвестная ошибка при загрузке config.json: {e}, используются настройки по умолчанию"
+        )
+
 
 async def reload_config(bot):
     """Перезагружает конфигурацию и уведомляет администратора."""
     from ..utils.notifications import notify_admin, delete_all_bot_messages
-    
+
     global CONFIG
     old_config = CONFIG.copy()
     load_config()
-    
+
     changes = []
     for key in old_config["features"]:
         if old_config["features"][key] != CONFIG["features"][key]:
             status = "включена" if CONFIG["features"][key] else "отключена"
             changes.append(f"Функция {key} {status}")
-    
-    if old_config["settings"]["max_accounts_per_user"] != CONFIG["settings"]["max_accounts_per_user"]:
-        changes.append(f"Лимит аккаунтов изменён на {CONFIG['settings']['max_accounts_per_user']}")
-    
+
+    if (
+        old_config["settings"]["max_accounts_per_user"]
+        != CONFIG["settings"]["max_accounts_per_user"]
+    ):
+        changes.append(
+            f"Лимит аккаунтов изменён на {CONFIG['settings']['max_accounts_per_user']}"
+        )
+
     if changes:
         change_text = "\n".join(changes)
         logging.info(f"Конфигурация перезагружена:\n{change_text}")
@@ -91,5 +93,5 @@ async def reload_config(bot):
         logging.info("Конфигурация перезагружена: изменений нет")
         await delete_all_bot_messages(ADMIN_ID, bot)
         await notify_admin(bot, "Конфигурация перезагружена: изменений нет")
-    
+
     return True

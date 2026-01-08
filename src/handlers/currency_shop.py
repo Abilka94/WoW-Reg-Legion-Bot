@@ -12,7 +12,7 @@ from ..config.translations import TRANSLATIONS as T
 from ..config.currency_config import CURRENCY_SHOP_CONFIG
 from ..states.user_states import CurrencyShopStates
 from ..keyboards.user_keyboards import kb_main, kb_back, kb_coins_menu, kb_coins_packages, kb_account_select_for_coins
-from ..utils.notifications import record_message, delete_all_bot_messages, delete_user_message
+from ..utils.notifications import record_message, delete_all_bot_messages, delete_user_message, safe_callback_answer
 from ..database.user_operations import get_user_accounts_with_coins, add_coins_to_account
 
 logger = logging.getLogger("bot")
@@ -26,11 +26,11 @@ def register_currency_shop_handlers(dp, pool, bot_instance):
     @dp.callback_query(F.data == "coins_menu")
     async def cb_coins_menu(c: CallbackQuery, state: FSMContext):
         if not CONFIG["features"].get("currency_shop", False) or not CONFIG.get("currency_shop", {}).get("enabled", False):
-            await c.answer(T["feature_disabled"], show_alert=True)
+            await safe_callback_answer(c, T["feature_disabled"], show_alert=True)
             return
         
         if not CURRENCY_SHOP_CONFIG.get("shop_enabled", False):
-            await c.answer(T["shop_disabled"], show_alert=True)
+            await safe_callback_answer(c, T["shop_disabled"], show_alert=True)
             return
         
         await state.clear()
@@ -57,12 +57,12 @@ def register_currency_shop_handlers(dp, pool, bot_instance):
             msg = await bot.send_message(c.from_user.id, text, reply_markup=kb_coins_menu())
         
         record_message(c.from_user.id, msg, "command")
-        await c.answer()
+        await safe_callback_answer(c)
 
     @dp.callback_query(F.data == "buy_coins")
     async def cb_buy_coins(c: CallbackQuery, state: FSMContext):
         if not CONFIG["features"].get("currency_shop", False) or not CONFIG.get("currency_shop", {}).get("purchase", False):
-            await c.answer(T["purchase_disabled"], show_alert=True)
+            await safe_callback_answer(c, T["purchase_disabled"], show_alert=True)
             return
         
         await state.clear()
@@ -75,20 +75,20 @@ def register_currency_shop_handlers(dp, pool, bot_instance):
             msg = await bot.send_message(c.from_user.id, T["buy_coins"], reply_markup=kb_coins_packages())
         
         record_message(c.from_user.id, msg, "command")
-        await c.answer()
+        await safe_callback_answer(c)
 
     # Обработчики покупки пакетов валюты
     @dp.callback_query(F.data.startswith("buy_coins_"))
     async def cb_buy_coins_package(c: CallbackQuery, state: FSMContext):
         if not CONFIG["features"].get("currency_shop", False) or not CONFIG.get("currency_shop", {}).get("purchase", False):
-            await c.answer(T["purchase_disabled"], show_alert=True)
+            await safe_callback_answer(c, T["purchase_disabled"], show_alert=True)
             return
         
         package = c.data.replace("buy_coins_", "")
         
         if package == "custom":
             if not CURRENCY_SHOP_CONFIG.get("custom_purchase", {}).get("enabled", False):
-                await c.answer(T["custom_purchases_disabled"], show_alert=True)
+                await safe_callback_answer(c, T["custom_purchases_disabled"], show_alert=True)
                 return
             
             await state.set_state(CurrencyShopStates.custom_amount)
@@ -97,13 +97,13 @@ def register_currency_shop_handlers(dp, pool, bot_instance):
             bot = bot_instance
             msg = await bot.send_message(c.from_user.id, T["enter_coins_amount"], reply_markup=kb_back())
             record_message(c.from_user.id, msg, "command")
-            await c.answer()
+            await safe_callback_answer(c)
             return
         
         # Проверяем, есть ли такой пакет в конфигурации
         packages = CURRENCY_SHOP_CONFIG.get("currency_packages", {})
         if package not in packages:
-            await c.answer(T["unknown_package"], show_alert=True)
+            await safe_callback_answer(c, T["unknown_package"], show_alert=True)
             return
         
         amount = packages[package]["amount"]
@@ -117,19 +117,19 @@ def register_currency_shop_handlers(dp, pool, bot_instance):
             bot = bot_instance
             msg = await bot.send_message(c.from_user.id, T["no_accounts_for_coins"], reply_markup=kb_back())
             record_message(c.from_user.id, msg, "command")
-            await c.answer()
+            await safe_callback_answer(c)
             return
         
         await delete_all_bot_messages(c.from_user.id, bot_instance)
         bot = bot_instance
         msg = await bot.send_message(c.from_user.id, T["select_account_for_coins"], reply_markup=kb_account_select_for_coins(accounts))
         record_message(c.from_user.id, msg, "command")
-        await c.answer()
+        await safe_callback_answer(c)
 
     @dp.callback_query(F.data.startswith("coins_select_"))
     async def cb_coins_select_account(c: CallbackQuery, state: FSMContext):
         if not CONFIG["features"].get("currency_shop", False) or not CONFIG.get("currency_shop", {}).get("purchase", False):
-            await c.answer(T["purchase_disabled"], show_alert=True)
+            await safe_callback_answer(c, T["purchase_disabled"], show_alert=True)
             return
         
         email = c.data.replace("coins_select_", "")
@@ -137,7 +137,7 @@ def register_currency_shop_handlers(dp, pool, bot_instance):
         amount = data.get("amount")
         
         if not amount:
-            await c.answer(T["coins_amount_error"], show_alert=True)
+            await safe_callback_answer(c, T["coins_amount_error"], show_alert=True)
             return
         
         # Имитация покупки (заглушка)
@@ -153,11 +153,11 @@ def register_currency_shop_handlers(dp, pool, bot_instance):
                 bot = bot_instance
                 msg = await bot.send_message(c.from_user.id, text, reply_markup=kb_main())
                 record_message(c.from_user.id, msg, "command")
-                await c.answer()
+                await safe_callback_answer(c)
             else:
-                await c.answer(T["coins_purchase_error"], show_alert=True)
+                await safe_callback_answer(c, T["coins_purchase_error"], show_alert=True)
         else:
-            await c.answer(T["purchase_disabled"], show_alert=True)
+            await safe_callback_answer(c, T["purchase_disabled"], show_alert=True)
 
     @dp.message(CurrencyShopStates.custom_amount)
     async def step_custom_amount(m: Message, state: FSMContext):

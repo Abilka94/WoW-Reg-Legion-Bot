@@ -21,12 +21,3 @@ class AdminStates(StatesGroup):
 class ChangePasswordStates(StatesGroup):
     """Состояния для смены пароля"""
     new_password = State()
-
-class BuyCoinsStates(StatesGroup):
-    """Состояния для покупки валюты"""
-    selecting_account = State()
-    entering_amount = State()
-
-class CurrencyShopStates(StatesGroup):
-    """Состояния для магазина валюты"""
-    custom_amount = State()

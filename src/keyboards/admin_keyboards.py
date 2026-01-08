@@ -18,8 +18,6 @@ def kb_admin():
     if CONFIG["features"]["admin_delete_account"]:
         buttons.append([InlineKeyboardButton(text=T["admin_delete_account"], callback_data="admin_delete_account")])
     
-    if CONFIG["features"]["admin_download_log"]:
-        buttons.append([InlineKeyboardButton(text=T["admin_log"], callback_data="admin_download_log")])
     
     if CONFIG["features"]["admin_reload_config"]:
         buttons.append([InlineKeyboardButton(text=T["admin_reload_config"], callback_data="admin_reload_config")])

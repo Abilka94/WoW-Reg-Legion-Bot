@@ -1,5 +1,5 @@
-﻿"""
-РћР±СЂР°Р±РѕС‚С‡РёРєРё РґР»СЏ СѓРїСЂР°РІР»РµРЅРёСЏ Р°РєРєР°СѓРЅС‚Р°РјРё
+"""
+Обработчики для управления аккаунтами
 """
 import logging
 from aiogram import F
@@ -7,9 +7,9 @@ from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKe
 from aiogram.fsm.context import FSMContext
 from aiogram.exceptions import TelegramBadRequest
 
-from ..config.settings import CONFIG, BOT_VERSION
+from ..config.settings import CONFIG
 from ..config.translations import TRANSLATIONS as T
-from ..states.user_states import ForgotPasswordStates, ChangePasswordStates
+from ..states.user_states import ChangePasswordStates
 from ..keyboards.user_keyboards import kb_main, kb_back, kb_account_list
 from ..utils.validators import validate_email, validate_password
 from ..utils.notifications import record_message, delete_all_bot_messages, delete_user_message
@@ -18,62 +18,8 @@ from ..database.user_operations import reset_password, change_password, get_acco
 logger = logging.getLogger("bot")
 
 def register_account_handlers(dp, pool, bot_instance):
-    """Р РµРіРёСЃС‚СЂРёСЂСѓРµС‚ РѕР±СЂР°Р±РѕС‚С‡РёРєРё СѓРїСЂР°РІР»РµРЅРёСЏ Р°РєРєР°СѓРЅС‚Р°РјРё"""
+    """Регистрирует обработчики управления аккаунтами"""
     
-    if CONFIG["features"]["password_reset"]:
-        @dp.callback_query(F.data == "forgot")
-        async def cb_forgot(c: CallbackQuery, state: FSMContext):
-            if not CONFIG["features"]["password_reset"]:
-                await c.answer(T["feature_disabled"], show_alert=True)
-                return
-            
-            await state.clear()
-            await delete_all_bot_messages(c.from_user.id, bot_instance)
-            await state.set_state(ForgotPasswordStates.email)
-            bot = bot_instance
-            msg = await bot.send_message(c.from_user.id, T["forgot_email_prompt"], reply_markup=kb_back())
-            record_message(c.from_user.id, msg, "command")
-            await c.answer()
-
-        @dp.message(ForgotPasswordStates.email)
-        async def step_forgot(m: Message, state: FSMContext):
-            mail = m.text.strip().upper()
-            
-            if mail in (T["to_main"], T["cancel"]):
-                await state.clear()
-                msg = await m.answer(T["start"].format(version=BOT_VERSION), reply_markup=kb_main())
-                record_message(m.from_user.id, msg, "command")
-                await delete_user_message(m)
-                return
-            
-            if not validate_email(mail):
-                msg = await m.answer(T["err_mail"], reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="OK", callback_data="error_ok")]]))
-                record_message(m.from_user.id, msg, "error")
-                await delete_user_message(m)
-                return
-            
-            # РџСЂРѕРІРµСЂСЏРµРј, РїСЂРёРЅР°РґР»РµР¶РёС‚ Р»Рё email СЌС‚РѕРјСѓ РїРѕР»СЊР·РѕРІР°С‚РµР»СЋ
-            async with pool.acquire() as conn:
-                async with conn.cursor() as cur:
-                    await cur.execute("SELECT 1 FROM users WHERE telegram_id=%s AND email=%s", (m.from_user.id, mail))
-                    if not await cur.fetchone():
-                        msg = await m.answer(T["email_not_linked"], reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="OK", callback_data="error_ok")]]))
-                        record_message(m.from_user.id, msg, "error")
-                        await delete_user_message(m)
-                        return
-            
-            tmp = await reset_password(pool, mail)
-            await state.clear()
-            await delete_all_bot_messages(m.from_user.id, bot_instance)
-            
-            if tmp is None:
-                msg = await m.answer(T["reset_err_not_found"], reply_markup=kb_main())
-            else:
-                msg = await m.answer(T["reset_success"].format(password=tmp), reply_markup=kb_main())
-            
-            record_message(m.from_user.id, msg, "command")
-            await delete_user_message(m)
-
     if CONFIG["features"]["account_management"]:
         @dp.callback_query(F.data == "my_account")
         async def cb_acc(c: CallbackQuery, state: FSMContext):
@@ -82,18 +28,18 @@ def register_account_handlers(dp, pool, bot_instance):
                 return
             
             await state.clear()
-            await delete_all_bot_messages(c.from_user.id, bot_instance)
+            await delete_all_bot_messages(c.from_user.id)
             accounts = await get_account_info(pool, c.from_user.id)
             
             if not accounts:
-                bot = bot_instance
+                from main import bot
                 msg = await bot.send_message(c.from_user.id, T["account_no_account"], reply_markup=kb_back())
                 record_message(c.from_user.id, msg, "command")
                 await c.answer()
                 return
             
             text = T["select_account_prompt"]
-            bot = bot_instance
+            from main import bot
             msg = await bot.send_message(c.from_user.id, text, reply_markup=kb_account_list(accounts))
             record_message(c.from_user.id, msg, "command")
             await c.answer()
@@ -109,7 +55,7 @@ def register_account_handlers(dp, pool, bot_instance):
             accounts = await get_account_info(pool, c.from_user.id)
             
             if not accounts:
-                bot = bot_instance
+                from main import bot
                 msg = await bot.send_message(c.from_user.id, T["account_no_account"], reply_markup=kb_back())
                 record_message(c.from_user.id, msg, "command")
                 await c.answer()
@@ -117,7 +63,7 @@ def register_account_handlers(dp, pool, bot_instance):
             
             selected = next((acc for acc in accounts if acc[0] == email), None)
             if not selected:
-                bot = bot_instance
+                from main import bot
                 msg = await bot.send_message(c.from_user.id, T["no_access"], reply_markup=kb_back())
                 record_message(c.from_user.id, msg, "command")
                 await c.answer()
@@ -133,10 +79,36 @@ def register_account_handlers(dp, pool, bot_instance):
                 if "message is not modified" in str(e).lower():
                     await c.answer()
                     return
-                bot = bot_instance
+                from main import bot
                 msg = await bot.send_message(c.from_user.id, text, reply_markup=kb_account_list(accounts, selected_email=email))
             
             record_message(c.from_user.id, msg, "command")
+            await c.answer()
+
+        @dp.callback_query(F.data.startswith("reset_password_"))
+        async def cb_reset_password(c: CallbackQuery, state: FSMContext):
+            if not CONFIG["features"]["account_management"]:
+                await c.answer(T["feature_disabled"], show_alert=True)
+                return
+
+            await state.clear()
+            email = c.data.replace("reset_password_", "")
+            accounts = await get_account_info(pool, c.from_user.id)
+            if not any(acc[0] == email for acc in accounts):
+                await c.answer("❌ ??????? ?? ??????", show_alert=True)
+                return
+
+            tmp = await reset_password(pool, email)
+            if tmp is None:
+                await c.answer(T["reset_err_not_found"], show_alert=True)
+                return
+
+            text_msg = T["reset_success"].format(password=tmp)
+            try:
+                await c.message.edit_text(text_msg, reply_markup=kb_account_list(accounts, selected_email=email))
+            except TelegramBadRequest:
+                from main import bot
+                await bot.send_message(c.from_user.id, text_msg, reply_markup=kb_account_list(accounts, selected_email=email))
             await c.answer()
 
         @dp.callback_query(F.data == "change_password")
@@ -146,17 +118,17 @@ def register_account_handlers(dp, pool, bot_instance):
                 return
             
             await state.clear()
-            await delete_all_bot_messages(c.from_user.id, bot_instance)
+            await delete_all_bot_messages(c.from_user.id)
             accounts = await get_account_info(pool, c.from_user.id)
             
             if not accounts:
-                bot = bot_instance
+                from main import bot
                 msg = await bot.send_message(c.from_user.id, T["account_no_account"], reply_markup=kb_back())
                 record_message(c.from_user.id, msg, "command")
                 await c.answer()
                 return
             
-            # РќР°С…РѕРґРёРј РІС‹Р±СЂР°РЅРЅС‹Р№ email РёР· С‚РµРєСЃС‚Р° СЃРѕРѕР±С‰РµРЅРёСЏ
+            # Находим выбранный email из текста сообщения
             sel = None
             for email, *_ in accounts:
                 if email in c.message.text:
@@ -164,7 +136,7 @@ def register_account_handlers(dp, pool, bot_instance):
                     break
             
             if not sel:
-                bot = bot_instance
+                from main import bot
                 msg = await bot.send_message(c.from_user.id, T["select_account_prompt"], reply_markup=kb_account_list(accounts))
                 record_message(c.from_user.id, msg, "command")
                 await c.answer()
@@ -172,7 +144,7 @@ def register_account_handlers(dp, pool, bot_instance):
             
             await state.set_state(ChangePasswordStates.new_password)
             await state.update_data(email=sel)
-            bot = bot_instance
+            from main import bot
             msg = await bot.send_message(c.from_user.id, T["change_password_prompt"], reply_markup=kb_back())
             record_message(c.from_user.id, msg, "command")
             await c.answer()
@@ -185,7 +157,7 @@ def register_account_handlers(dp, pool, bot_instance):
             
             if new_password in (T["to_main"], T["cancel"]):
                 await state.clear()
-                msg = await m.answer(T["start"].format(version=BOT_VERSION), reply_markup=kb_main())
+                msg = await m.answer(T["start"], reply_markup=kb_main())
                 record_message(m.from_user.id, msg, "command")
                 await delete_user_message(m)
                 return
@@ -198,7 +170,7 @@ def register_account_handlers(dp, pool, bot_instance):
             
             await change_password(pool, email, new_password)
             await state.clear()
-            await delete_all_bot_messages(m.from_user.id, bot_instance)
+            await delete_all_bot_messages(m.from_user.id)
             msg = await m.answer(T["change_password_success"], reply_markup=kb_main())
             record_message(m.from_user.id, msg, "command")
             await delete_user_message(m)
@@ -211,10 +183,10 @@ def register_account_handlers(dp, pool, bot_instance):
             
             email = c.data.replace("delete_account_", "")
             success = await delete_account(pool, c.from_user.id, email)
-            await delete_all_bot_messages(c.from_user.id, bot_instance)
+            await delete_all_bot_messages(c.from_user.id)
             
             if not success:
-                bot = bot_instance
+                from main import bot
                 msg = await bot.send_message(c.from_user.id, T["delete_account_error"], reply_markup=kb_back())
                 record_message(c.from_user.id, msg, "command")
                 await c.answer()
@@ -222,16 +194,14 @@ def register_account_handlers(dp, pool, bot_instance):
             
             accounts = await get_account_info(pool, c.from_user.id)
             if not accounts:
-                bot = bot_instance
+                from main import bot
                 msg = await bot.send_message(c.from_user.id, T["account_no_account"], reply_markup=kb_back())
                 record_message(c.from_user.id, msg, "command")
                 await c.answer()
                 return
             
             text = T["delete_account_success"] + "\n\n" + T["select_account_prompt"]
-            bot = bot_instance
+            from main import bot
             msg = await bot.send_message(c.from_user.id, text, reply_markup=kb_account_list(accounts))
             record_message(c.from_user.id, msg, "command")
             await c.answer()
-
-

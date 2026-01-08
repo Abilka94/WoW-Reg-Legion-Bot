@@ -27,7 +27,7 @@ def register_command_handlers(dp, pool, bot_instance):
     async def cmd_start(m: Message, state: FSMContext):
         await state.clear()
         await delete_all_bot_messages(m.from_user.id, bot_instance)
-        msg = await m.answer(T["start"].format(version=BOT_VERSION), reply_markup=kb_main())
+        msg = await m.answer(T["start"], reply_markup=kb_main())
         record_message(m.from_user.id, msg, "command")
         await delete_user_message(m)
 
@@ -38,8 +38,8 @@ def register_command_handlers(dp, pool, bot_instance):
         msg = await m.answer(text, reply_markup=kb_back())
         record_message(m.from_user.id, msg, "command")
         await delete_user_message(m)
-
     if CONFIG["features"]["admin_panel"]:
+
         @dp.message(Command("admin"))
         async def cmd_admin(m: Message, state: FSMContext):
             if not CONFIG["features"]["admin_panel"]:
@@ -98,9 +98,9 @@ def register_callback_handlers(dp, pool, bot_instance):
         await state.clear()
         await delete_all_bot_messages(c.from_user.id, bot_instance)
         try:
-            msg = await c.message.edit_text(T["start"].format(version=BOT_VERSION), reply_markup=kb_main())
+            msg = await c.message.edit_text(T["start"], reply_markup=kb_main())
         except:
-            msg = await bot_instance.send_message(c.from_user.id, T["start"].format(version=BOT_VERSION), reply_markup=kb_main())
+            msg = await bot_instance.send_message(c.from_user.id, T["start"], reply_markup=kb_main())
         record_message(c.from_user.id, msg, "command")
         await c.answer()
 
@@ -144,7 +144,6 @@ def register_callback_handlers(dp, pool, bot_instance):
         msg = await bot_instance.send_message(c.from_user.id, txt or "—", reply_markup=kb_back())
         record_message(c.from_user.id, msg, "command")
         await c.answer()
-
     @dp.callback_query(F.data == "error_ok")
     async def cb_error_ok(c: CallbackQuery):
         try:
