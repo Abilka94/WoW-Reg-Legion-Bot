@@ -13,8 +13,8 @@ from ..states.user_states import AdminStates
 from ..keyboards.admin_keyboards import kb_admin, kb_admin_back
 from ..keyboards.user_keyboards import kb_main, kb_back
 from ..utils.validators import validate_email
-from ..utils.notifications import record_message, delete_all_bot_messages, delete_user_message, notify_admin
-from ..database.user_operations import admin_delete_account
+from ..utils.notifications import record_message, delete_all_bot_messages, delete_user_message, notify_admin, safe_edit_message
+from ..database.user_operations import admin_delete_account, get_account_by_email
 
 logger = logging.getLogger("bot")
 
@@ -148,7 +148,8 @@ def register_admin_handlers(dp, pool, bot_instance):
             if m.text.strip() in (T["cancel"], T["admin_back"]):
                 await state.clear()
                 await delete_all_bot_messages(m.from_user.id)
-                msg = await m.answer(T["admin_panel"], reply_markup=kb_admin())
+                from main import bot
+                msg = await bot.send_message(m.from_user.id, T["admin_panel"], reply_markup=kb_admin())
                 record_message(m.from_user.id, msg, "command")
                 await delete_user_message(m)
                 return
@@ -158,25 +159,96 @@ def register_admin_handlers(dp, pool, bot_instance):
             try:
                 is_valid, error_msg = validate_email(email, strict=True)
                 if not is_valid:
-                    raise ValueError(error_msg or "Некорректный e-mail")
+                    from main import bot
+                    msg = await bot.send_message(m.from_user.id, T["admin_delete_error"].format(error=error_msg or "Некорректный e-mail"), reply_markup=kb_admin_back())
+                    record_message(m.from_user.id, msg, "command")
+                    await delete_user_message(m)
+                    return
                 
-                success = await admin_delete_account(pool, email)
+                # Получаем информацию об аккаунте
+                username, telegram_id = await get_account_by_email(pool, email)
+                if not username:
+                    from main import bot
+                    msg = await bot.send_message(m.from_user.id, T["admin_delete_error"].format(error="Аккаунт не найден"), reply_markup=kb_admin_back())
+                    record_message(m.from_user.id, msg, "command")
+                    await delete_user_message(m)
+                    return
+                
+                # Сохраняем данные для подтверждения
+                await state.update_data(email=email, username=username, telegram_id=telegram_id)
+                await state.set_state(AdminStates.delete_account_confirm)
+                
+                # Показываем предупреждение с подтверждением
+                confirm_text = T["admin_delete_confirm"].format(email=email, username=username)
+                confirm_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                    [
+                        InlineKeyboardButton(text=T["admin_delete_confirm_yes"], callback_data="admin_confirm_delete"),
+                        InlineKeyboardButton(text=T["admin_delete_confirm_no"], callback_data="admin_back")
+                    ]
+                ])
+                
+                from main import bot
+                await delete_user_message(m)
+                # Отправляем новое сообщение с предупреждением
+                msg = await bot.send_message(m.from_user.id, confirm_text, reply_markup=confirm_keyboard)
+                record_message(m.from_user.id, msg, "command")
+            
+            except Exception as e:
+                logger.error(f"Ошибка при получении информации об аккаунте: {e}")
                 await state.clear()
-                await delete_all_bot_messages(m.from_user.id)
+                from main import bot
+                msg = await bot.send_message(m.from_user.id, T["admin_delete_error"].format(error=str(e)), reply_markup=kb_admin_back())
+                record_message(m.from_user.id, msg, "command")
+                await delete_user_message(m)
+
+        @dp.callback_query(F.data == "admin_confirm_delete")
+        async def cb_admin_confirm_delete(c: CallbackQuery, state: FSMContext):
+            if c.from_user.id != ADMIN_ID:
+                await c.answer(T["no_access"], show_alert=True)
+                return
+            
+            data = await state.get_data()
+            email = data.get("email")
+            username = data.get("username")
+            telegram_id = data.get("telegram_id")
+            
+            if not email:
+                await c.answer("❌ Ошибка: данные не найдены", show_alert=True)
+                await state.clear()
+                from main import bot
+                await safe_edit_message(bot, c, T["admin_panel"], reply_markup=kb_admin())
+                return
+            
+            try:
+                # Удаляем аккаунт
+                success, deleted_telegram_id = await admin_delete_account(pool, email)
+                await state.clear()
                 
                 if success:
-                    msg = await m.answer(T["admin_delete_success"].format(email=email), reply_markup=kb_admin_back())
+                    # Отправляем уведомление пользователю, если он существует
+                    if deleted_telegram_id:
+                        try:
+                            from main import bot
+                            notification_text = T["account_deleted_by_admin"].format(email=email, username=username)
+                            await bot.send_message(deleted_telegram_id, notification_text)
+                            logger.info(f"Уведомление об удалении отправлено пользователю {deleted_telegram_id}")
+                        except Exception as e:
+                            logger.warning(f"Не удалось отправить уведомление пользователю {deleted_telegram_id}: {e}")
+                    
+                    # Уведомляем админа об успехе
+                    from main import bot
+                    await safe_edit_message(bot, c, T["admin_delete_success"].format(email=email), reply_markup=kb_admin_back())
                 else:
-                    msg = await m.answer(T["admin_delete_error"].format(error="Аккаунт не найден"), reply_markup=kb_admin_back())
+                    from main import bot
+                    await safe_edit_message(bot, c, T["admin_delete_error"].format(error="Не удалось удалить аккаунт"), reply_markup=kb_admin_back())
             
             except Exception as e:
                 logger.error(f"Ошибка при удалении аккаунта админом: {e}")
                 await state.clear()
-                await delete_all_bot_messages(m.from_user.id)
-                msg = await m.answer(T["admin_delete_error"].format(error=str(e)), reply_markup=kb_admin_back())
+                from main import bot
+                await safe_edit_message(bot, c, T["admin_delete_error"].format(error=str(e)), reply_markup=kb_admin_back())
             
-            record_message(m.from_user.id, msg, "command")
-            await delete_user_message(m)
+            await c.answer()
 
     if CONFIG["features"]["admin_reload_config"]:
         @dp.callback_query(F.data == "admin_reload_config")

@@ -194,11 +194,36 @@ async def delete_account(pool, telegram_id, email):
                 logger.warning(f"Не удалось удалить аккаунт: telegram_id={telegram_id}, email={mu}")
             return affected > 0
 
-async def admin_delete_account(pool, email):
-    """Удаляет аккаунт администратором"""
+async def get_account_by_email(pool, email):
+    """Получает информацию об аккаунте по email (username, telegram_id)"""
     mu = email.upper()
     async with pool.acquire() as conn:
         async with conn.cursor() as cur:
+            await cur.execute(
+                "SELECT a.username, u.telegram_id "
+                "FROM account a "
+                "JOIN users u ON a.email = u.email "
+                "WHERE a.email=%s",
+                (mu,)
+            )
+            row = await cur.fetchone()
+            if row:
+                return row[0], row[1]  # username, telegram_id
+            return None, None
+
+async def admin_delete_account(pool, email):
+    """Удаляет аккаунт администратором. Возвращает (success, telegram_id)"""
+    mu = email.upper()
+    telegram_id = None
+    
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            # Получаем telegram_id перед удалением
+            await cur.execute("SELECT telegram_id FROM users WHERE email=%s LIMIT 1", (mu,))
+            user_row = await cur.fetchone()
+            if user_row:
+                telegram_id = user_row[0]
+            
             # Получаем ID аккаунта для удаления account_access
             await cur.execute("SELECT id FROM account WHERE email=%s", (mu,))
             account_row = await cur.fetchone()
@@ -212,7 +237,7 @@ async def admin_delete_account(pool, email):
             
             affected = cur.rowcount
             if affected:
-                logger.info(f"Админ удалил аккаунт: email={mu}")
+                logger.info(f"Админ удалил аккаунт: email={mu}, telegram_id={telegram_id}")
             else:
                 logger.warning(f"Админ не смог удалить аккаунт: email={mu}")
-            return affected > 0
+            return affected > 0, telegram_id

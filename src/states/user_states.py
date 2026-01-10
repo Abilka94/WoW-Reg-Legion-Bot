@@ -17,6 +17,7 @@ class AdminStates(StatesGroup):
     """Состояния для административных функций"""
     broadcast_text = State()
     delete_account_input = State()
+    delete_account_confirm = State()
 
 class ChangePasswordStates(StatesGroup):
     """Состояния для смены пароля"""

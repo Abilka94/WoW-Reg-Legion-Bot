@@ -23,7 +23,7 @@ from src.config.settings import load_config, TOKEN, REDIS_DSN, BOT_VERSION, CONF
 from src.config.translations import TRANSLATIONS as T
 from src.database.connection import get_pool
 from src.database.user_operations import (
-    get_account_info, delete_account, admin_delete_account,
+    get_account_info, delete_account, admin_delete_account, get_account_by_email,
     register_user, reset_password, change_password
 )
 from src.utils.middleware import RateLimit
@@ -881,31 +881,109 @@ async def main():
             return
         
         try:
-            success = await admin_delete_account(pool, email)
-            await state.clear()
+            # Получаем информацию об аккаунте
+            username, telegram_id = await get_account_by_email(pool, email)
+            if not username:
+                admin_id = admin_menu_msgs.get(message.from_user.id)
+                if admin_id:
+                    try:
+                        await bot.edit_message_text(
+                            text=T["admin_delete_error"].format(error="Аккаунт не найден"),
+                            chat_id=message.chat.id,
+                            message_id=admin_id,
+                            reply_markup=kb_admin_back()
+                        )
+                    except Exception:
+                        pass
+                return
             
-            # Удаляем старое сообщение админ панели перед созданием нового (как в /start)
-            old_admin_id = admin_menu_msgs.pop(message.from_user.id, None)
-            if old_admin_id:
+            # Сохраняем данные для подтверждения
+            await state.update_data(email=email, username=username, telegram_id=telegram_id)
+            await state.set_state(AdminStates.delete_account_confirm)
+            
+            # Показываем предупреждение с подтверждением
+            confirm_text = T["admin_delete_confirm"].format(email=email, username=username)
+            confirm_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [
+                    InlineKeyboardButton(text=T["admin_delete_confirm_yes"], callback_data="admin_confirm_delete"),
+                    InlineKeyboardButton(text=T["admin_delete_confirm_no"], callback_data="admin_back")
+                ]
+            ])
+            
+            admin_id = admin_menu_msgs.get(message.from_user.id)
+            if admin_id:
                 try:
-                    await bot.delete_message(message.chat.id, old_admin_id)
+                    await bot.edit_message_text(
+                        text=confirm_text,
+                        chat_id=message.chat.id,
+                        message_id=admin_id,
+                        reply_markup=confirm_keyboard
+                    )
                 except Exception:
-                    pass
-            
-            # Создаем новое сообщение админ панели
-            await render_admin_menu(message.chat.id, message.from_user.id)
+                    # Если не удалось отредактировать, отправляем новое сообщение
+                    msg = await bot.send_message(message.chat.id, confirm_text, reply_markup=confirm_keyboard)
+                    admin_menu_msgs[message.from_user.id] = msg.message_id
+            else:
+                msg = await bot.send_message(message.chat.id, confirm_text, reply_markup=confirm_keyboard)
+                admin_menu_msgs[message.from_user.id] = msg.message_id
         except Exception as e:
-            logger.error(f"Ошибка админ удаления: {e}")
+            logger.error(f"Ошибка при получении информации об аккаунте: {e}")
             await state.clear()
-            # Удаляем старое сообщение админ панели перед созданием нового
-            old_admin_id = admin_menu_msgs.pop(message.from_user.id, None)
-            if old_admin_id:
+            admin_id = admin_menu_msgs.get(message.from_user.id)
+            if admin_id:
                 try:
-                    await bot.delete_message(message.chat.id, old_admin_id)
+                    await bot.edit_message_text(
+                        text=T["admin_delete_error"].format(error=str(e)),
+                        chat_id=message.chat.id,
+                        message_id=admin_id,
+                        reply_markup=kb_admin_back()
+                    )
                 except Exception:
                     pass
-            # Создаем новое сообщение админ панели
-            await render_admin_menu(message.chat.id, message.from_user.id)
+
+    @dp.callback_query(F.data == "admin_confirm_delete")
+    async def cb_admin_confirm_delete(callback: CallbackQuery, state: FSMContext):
+        if callback.from_user.id != ADMIN_ID:
+            await callback.answer("❌ Нет доступа", show_alert=True)
+            return
+        
+        data = await state.get_data()
+        email = data.get("email")
+        username = data.get("username")
+        telegram_id = data.get("telegram_id")
+        
+        if not email:
+            await callback.answer("❌ Ошибка: данные не найдены", show_alert=True)
+            await state.clear()
+            await render_admin_menu(callback.message.chat.id, callback.from_user.id, callback)
+            return
+        
+        try:
+            # Удаляем аккаунт
+            success, deleted_telegram_id = await admin_delete_account(pool, email)
+            await state.clear()
+            
+            if success:
+                # Отправляем уведомление пользователю, если он существует
+                if deleted_telegram_id:
+                    try:
+                        notification_text = T["account_deleted_by_admin"].format(email=email, username=username)
+                        await bot.send_message(deleted_telegram_id, notification_text)
+                        logger.info(f"Уведомление об удалении отправлено пользователю {deleted_telegram_id}")
+                    except Exception as e:
+                        logger.warning(f"Не удалось отправить уведомление пользователю {deleted_telegram_id}: {e}")
+                
+                # Уведомляем админа об успехе
+                await safe_edit_message(bot, callback, T["admin_delete_success"].format(email=email), reply_markup=kb_admin_back())
+            else:
+                await safe_edit_message(bot, callback, T["admin_delete_error"].format(error="Не удалось удалить аккаунт"), reply_markup=kb_admin_back())
+        
+        except Exception as e:
+            logger.error(f"Ошибка при удалении аккаунта админом: {e}")
+            await state.clear()
+            await safe_edit_message(bot, callback, T["admin_delete_error"].format(error=str(e)), reply_markup=kb_admin_back())
+        
+        await callback.answer()
 
     @dp.callback_query(F.data.in_(["admin_broadcast", "admin_reload_config"]))
     async def cb_admin_other_functions(callback: CallbackQuery):
