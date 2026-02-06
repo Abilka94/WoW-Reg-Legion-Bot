@@ -28,8 +28,8 @@ from src.database.user_operations import (
 )
 from src.utils.middleware import RateLimit
 from src.utils.notifications import safe_edit_message, delete_all_bot_messages, record_message
-from src.utils.validators import validate_email, validate_nickname, validate_password, filter_text, is_text_only
-from src.keyboards.user_keyboards import kb_main, kb_back, kb_account_list
+from src.utils.validators import validate_email, validate_nickname, validate_password, filter_text, is_text_only, check_password_strength
+from src.keyboards.user_keyboards import kb_main, kb_back, kb_account_list, kb_password_weak_choice
 from src.keyboards.admin_keyboards import kb_admin, kb_admin_back
 from src.states.user_states import RegistrationStates, ForgotPasswordStates, ChangePasswordStates, AdminStates
 
@@ -401,6 +401,17 @@ async def main():
             await message.answer(f"❌ {error_msg}")
             return
         
+        # Проверка сложности пароля
+        is_strong, warning_msg = check_password_strength(new_password)
+        if not is_strong:
+            # Пароль простой - показываем предупреждение с выбором
+            await state.update_data(new_password=new_password)
+            await state.set_state(ChangePasswordStates.password_confirm_weak)
+            warning_text = T["password_weak_warning"].format(warning=warning_msg)
+            await message.answer(warning_text, reply_markup=kb_password_weak_choice())
+            return
+        
+        # Пароль сложный - меняем пароль
         try:
             await change_password(pool, email, new_password)
             await state.clear()
@@ -501,6 +512,90 @@ async def main():
             user_wizard_msg[callback.from_user.id] = msg.message_id
         
 
+    @dp.callback_query(F.data == "use_weak_password")
+    async def cb_use_weak_password(callback: CallbackQuery, state: FSMContext):
+        """Обработчик выбора использования простого пароля"""
+        data = await state.get_data()
+        current_state = await state.get_state()
+        
+        if current_state == RegistrationStates.pwd_confirm_weak.state:
+            # Используем пароль для регистрации
+            pwd = data.get("pwd")
+            await state.update_data(pwd=pwd)
+            await state.set_state(RegistrationStates.mail)
+            text = f"3/3 · {T['progress'][2]}"
+            
+            wizard_id = user_wizard_msg.get(callback.from_user.id)
+            try:
+                await bot.edit_message_text(
+                    text=text,
+                    chat_id=callback.message.chat.id,
+                    message_id=wizard_id if wizard_id else callback.message.message_id,
+                    reply_markup=kb_wizard(2)
+                )
+            except:
+                msg = await callback.message.answer(text, reply_markup=kb_wizard(2))
+                user_wizard_msg[callback.from_user.id] = msg.message_id
+            await callback.answer()
+            
+        elif current_state == ChangePasswordStates.password_confirm_weak.state:
+            # Используем пароль для смены
+            new_password = data.get("new_password")
+            email = data.get("email")
+            try:
+                await change_password(pool, email, new_password)
+                await state.clear()
+                # Удаляем старое сообщение меню перед созданием нового
+                old_menu_id = main_menu_msgs.get(callback.from_user.id)
+                if old_menu_id:
+                    try:
+                        await bot.delete_message(callback.message.chat.id, old_menu_id)
+                    except Exception:
+                        pass
+                    main_menu_msgs.pop(callback.from_user.id, None)
+                await render_main_menu(callback.message.chat.id, callback.from_user.id)
+                await callback.answer("✅ Пароль успешно изменен!")
+            except Exception as e:
+                logger.error(f"Ошибка при смене пароля: {e}")
+                await callback.answer("❌ Ошибка при смене пароля", show_alert=True)
+    
+    @dp.callback_query(F.data == "change_weak_password")
+    async def cb_change_weak_password(callback: CallbackQuery, state: FSMContext):
+        """Обработчик выбора ввода нового пароля"""
+        current_state = await state.get_state()
+        
+        if current_state == RegistrationStates.pwd_confirm_weak.state:
+            # Возвращаемся к вводу пароля
+            await state.set_state(RegistrationStates.pwd)
+            text = f"2/3 · {T['progress'][1]}"
+            wizard_id = user_wizard_msg.get(callback.from_user.id)
+            try:
+                await bot.edit_message_text(
+                    text=text,
+                    chat_id=callback.message.chat.id,
+                    message_id=wizard_id if wizard_id else callback.message.message_id,
+                    reply_markup=kb_wizard(1)
+                )
+            except:
+                msg = await callback.message.answer(text, reply_markup=kb_wizard(1))
+                user_wizard_msg[callback.from_user.id] = msg.message_id
+            await callback.answer()
+            
+        elif current_state == ChangePasswordStates.password_confirm_weak.state:
+            # Возвращаемся к вводу пароля
+            await state.set_state(ChangePasswordStates.new_password)
+            text = T["change_password_prompt"]
+            try:
+                await bot.edit_message_text(
+                    text=text,
+                    chat_id=callback.message.chat.id,
+                    message_id=callback.message.message_id,
+                    reply_markup=kb_back()
+                )
+            except:
+                await callback.message.answer(text, reply_markup=kb_back())
+            await callback.answer()
+
     @dp.callback_query(F.data.in_(["wiz_back", "wiz_cancel"]))
     async def cb_wiz_nav(callback: CallbackQuery, state: FSMContext):
         current_state = await state.get_state()
@@ -520,6 +615,12 @@ async def main():
             await state.set_state(RegistrationStates.nick)
             text = f"1/3 · {T['progress'][0]}"
             await safe_edit_message(bot, callback, text, reply_markup=kb_wizard(0))
+            await callback.answer()
+        elif current_state == RegistrationStates.pwd_confirm_weak.state:
+            # Возвращаемся к вводу пароля
+            await state.set_state(RegistrationStates.pwd)
+            text = f"2/3 · {T['progress'][1]}"
+            await safe_edit_message(bot, callback, text, reply_markup=kb_wizard(1))
             await callback.answer()
         elif current_state == RegistrationStates.mail.state:
             await state.set_state(RegistrationStates.pwd)
@@ -665,6 +766,31 @@ async def main():
                     pass
             return
         
+        # Проверка сложности пароля
+        is_strong, warning_msg = check_password_strength(pwd)
+        if not is_strong:
+            # Пароль простой - показываем предупреждение с выбором
+            await state.update_data(pwd=pwd)
+            await state.set_state(RegistrationStates.pwd_confirm_weak)
+            warning_text = T["password_weak_warning"].format(warning=warning_msg)
+            wizard_id = user_wizard_msg.get(message.from_user.id)
+            if wizard_id:
+                try:
+                    await bot.edit_message_text(
+                        text=warning_text,
+                        chat_id=message.chat.id,
+                        message_id=wizard_id,
+                        reply_markup=kb_password_weak_choice()
+                    )
+                except Exception:
+                    msg = await message.answer(warning_text, reply_markup=kb_password_weak_choice())
+                    user_wizard_msg[message.from_user.id] = msg.message_id
+            else:
+                msg = await message.answer(warning_text, reply_markup=kb_password_weak_choice())
+                user_wizard_msg[message.from_user.id] = msg.message_id
+            return
+        
+        # Пароль сложный - продолжаем регистрацию
         await state.update_data(pwd=pwd)
         await state.set_state(RegistrationStates.mail)
         text = f"3/3 · {T['progress'][2]}"

@@ -58,3 +58,13 @@ def kb_account_list(accounts, selected_email=None):
     
     buttons.append([InlineKeyboardButton(text=T["to_main"], callback_data="back_to_main")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+def kb_password_weak_choice():
+    """Клавиатура для выбора при простом пароле"""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="✅ Использовать этот пароль", callback_data="use_weak_password"),
+            InlineKeyboardButton(text="🔄 Ввести другой", callback_data="change_weak_password")
+        ],
+        [InlineKeyboardButton(text=T["cancel"], callback_data="wiz_cancel")]
+    ])

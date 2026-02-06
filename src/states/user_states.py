@@ -7,6 +7,7 @@ class RegistrationStates(StatesGroup):
     """Состояния для процесса регистрации"""
     nick = State()
     pwd = State()
+    pwd_confirm_weak = State()  # Подтверждение использования простого пароля
     mail = State()
 
 class ForgotPasswordStates(StatesGroup):
@@ -22,3 +23,4 @@ class AdminStates(StatesGroup):
 class ChangePasswordStates(StatesGroup):
     """Состояния для смены пароля"""
     new_password = State()
+    password_confirm_weak = State()  # Подтверждение использования простого пароля

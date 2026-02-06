@@ -11,8 +11,8 @@ from aiogram.exceptions import TelegramBadRequest
 from ..config.settings import CONFIG
 from ..config.translations import TRANSLATIONS as T
 from ..states.user_states import RegistrationStates
-from ..keyboards.user_keyboards import kb_main, kb_wizard
-from ..utils.validators import validate_nickname, validate_password, validate_email
+from ..keyboards.user_keyboards import kb_main, kb_wizard, kb_password_weak_choice
+from ..utils.validators import validate_nickname, validate_password, validate_email, check_password_strength
 from ..utils.notifications import record_message, delete_all_bot_messages, delete_user_message
 from ..database.user_operations import register_user
 
@@ -201,6 +201,29 @@ def register_registration_handlers(dp, pool, bot_instance):
             await delete_user_message(m)
             return
         
+        # Проверка сложности пароля
+        is_strong, warning_msg = check_password_strength(pwd)
+        if not is_strong:
+            # Пароль простой - показываем предупреждение с выбором
+            await state.update_data(pwd=pwd)
+            await state.set_state(RegistrationStates.pwd_confirm_weak)
+            warning_text = T["password_weak_warning"].format(warning=warning_msg)
+            from ..main import bot
+            wizard_id = user_wizard_msg.get(m.from_user.id)
+            try:
+                await bot.edit_message_text(
+                    text=warning_text,
+                    chat_id=m.chat.id,
+                    message_id=wizard_id,
+                    reply_markup=kb_password_weak_choice()
+                )
+            except:
+                msg = await bot.send_message(m.from_user.id, warning_text, reply_markup=kb_password_weak_choice())
+                user_wizard_msg[m.from_user.id] = msg.message_id
+                record_message(m.from_user.id, msg, "conversation")
+            return
+        
+        # Пароль сложный - продолжаем регистрацию
         await state.update_data(pwd=pwd)
         await state.set_state(RegistrationStates.mail)
         text = f"3/3 · {T['progress'][2]}"

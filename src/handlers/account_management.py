@@ -10,8 +10,8 @@ from aiogram.exceptions import TelegramBadRequest
 from ..config.settings import CONFIG
 from ..config.translations import TRANSLATIONS as T
 from ..states.user_states import ChangePasswordStates
-from ..keyboards.user_keyboards import kb_main, kb_back, kb_account_list
-from ..utils.validators import validate_email, validate_password
+from ..keyboards.user_keyboards import kb_main, kb_back, kb_account_list, kb_password_weak_choice
+from ..utils.validators import validate_email, validate_password, check_password_strength
 from ..utils.notifications import record_message, delete_all_bot_messages, delete_user_message
 from ..database.user_operations import reset_password, change_password, get_account_info, delete_account
 
@@ -170,6 +170,19 @@ def register_account_handlers(dp, pool, bot_instance):
                 await delete_user_message(m)
                 return
             
+            # Проверка сложности пароля
+            is_strong, warning_msg = check_password_strength(new_password)
+            if not is_strong:
+                # Пароль простой - показываем предупреждение с выбором
+                await state.update_data(new_password=new_password)
+                await state.set_state(ChangePasswordStates.password_confirm_weak)
+                warning_text = T["password_weak_warning"].format(warning=warning_msg)
+                msg = await m.answer(warning_text, reply_markup=kb_password_weak_choice())
+                record_message(m.from_user.id, msg, "conversation")
+                await delete_user_message(m)
+                return
+            
+            # Пароль сложный - меняем пароль
             await change_password(pool, email, new_password)
             await state.clear()
             await delete_all_bot_messages(m.from_user.id)
