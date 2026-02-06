@@ -83,10 +83,14 @@ def test_modules():
         
         # Тесты валидации паролей
         password_tests = [
-            ("Пароль (английский)", "password123", True),
+            ("Пароль (английский, 11 символов)", "password123", True),
             ("Пароль (русский)", "пароль123", False),
-            ("Пароль (короткий)", "pass1", False),
+            ("Пароль (короткий, 5 символов)", "pass1", False),
+            ("Пароль (7 символов)", "pass123", False),
+            ("Пароль (8 символов)", "pass1234", True),
             ("Пароль (с спецсимволами)", "Pass@123!", True),
+            ("Пароль (только цифры, 8 символов)", "12345678", True),
+            ("Пароль (только буквы, 8 символов)", "password", True),
         ]
         
         all_passed = True
@@ -109,7 +113,8 @@ def test_modules():
         
         print("   🔐 Тесты паролей:")
         for name, value, expected in password_tests:
-            result = validate_password(value)
+            is_valid, _ = validate_password(value)
+            result = is_valid
             status = "✅" if result == expected else "❌"
             if result != expected:
                 all_passed = False

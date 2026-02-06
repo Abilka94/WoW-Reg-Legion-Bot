@@ -185,15 +185,24 @@ async def main():
             ("email (неизвестный)", "user@unknown12345.com", validate_email, False),
             ("nickname", "TestUser123", validate_nickname, True),
             ("nickname (короткий)", "Ab", validate_nickname, False),
-            ("password_rus", "пароль123", validate_password, False),
-            ("password_eng", "password123", validate_password, True),
-            ("password (короткий)", "pass1", validate_password, False),
+            ("password_rus", "пароль123", lambda x: validate_password(x)[0], False),
+            ("password_eng", "password123", lambda x: validate_password(x)[0], True),
+            ("password (короткий)", "pass1", lambda x: validate_password(x)[0], False),
+            ("password (7 символов)", "pass123", lambda x: validate_password(x)[0], False),
+            ("password (8 символов)", "pass1234", lambda x: validate_password(x)[0], True),
         ]
         
         all_passed = True
         for test_name, value, validator, expected in test_cases:
             if validator == validate_email:
                 result, _ = validator(value)
+            elif validator == validate_password or (hasattr(validator, '__name__') and 'password' in validator.__name__):
+                # Для validate_password и lambda функций для паролей
+                if callable(validator) and not hasattr(validator, '__name__'):
+                    # Это lambda функция
+                    result = validator(value)
+                else:
+                    result, _ = validate_password(value)
             else:
                 result = validator(value)
             status = "✅" if result == expected else "❌"

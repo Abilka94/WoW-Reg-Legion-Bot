@@ -395,8 +395,10 @@ async def main():
             await render_main_menu(message.chat.id, message.from_user.id)
             return
         
-        if not validate_password(new_password):
-            # Просто возвращаемся, не создавая новых сообщений
+        # Валидация пароля с детальными сообщениями об ошибках
+        is_valid, error_msg = validate_password(new_password)
+        if not is_valid:
+            await message.answer(f"❌ {error_msg}")
             return
         
         try:
@@ -646,13 +648,15 @@ async def main():
                     pass
             return
         
-        if not validate_password(pwd):
+        # Валидация пароля с детальными сообщениями об ошибках
+        is_valid, error_msg = validate_password(pwd)
+        if not is_valid:
             # Редактируем существующее wizard сообщение с ошибкой
             wizard_id = user_wizard_msg.get(message.from_user.id)
             if wizard_id:
                 try:
                     await bot.edit_message_text(
-                        text=T["err_pwd"],
+                        text=f"❌ {error_msg}",
                         chat_id=message.chat.id,
                         message_id=wizard_id,
                         reply_markup=kb_wizard(1)

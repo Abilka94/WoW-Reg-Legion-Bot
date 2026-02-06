@@ -188,9 +188,11 @@ def register_registration_handlers(dp, pool, bot_instance):
         
         pwd = m.text.strip()
         
-        if not validate_password(pwd):
+        # Валидация пароля с детальными сообщениями об ошибках
+        is_valid, error_msg = validate_password(pwd)
+        if not is_valid:
             msg = await m.answer(
-                T["err_pwd"],
+                f"❌ {error_msg}",
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
                     InlineKeyboardButton(text="OK", callback_data="error_ok")
                 ]])

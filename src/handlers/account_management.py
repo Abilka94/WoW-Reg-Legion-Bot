@@ -162,8 +162,10 @@ def register_account_handlers(dp, pool, bot_instance):
                 await delete_user_message(m)
                 return
             
-            if not validate_password(new_password):
-                msg = await m.answer(T["err_pwd"], reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="OK", callback_data="error_ok")]]))
+            # Валидация пароля с детальными сообщениями об ошибках
+            is_valid, error_msg = validate_password(new_password)
+            if not is_valid:
+                msg = await m.answer(f"❌ {error_msg}", reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="OK", callback_data="error_ok")]]))
                 record_message(m.from_user.id, msg, "error")
                 await delete_user_message(m)
                 return

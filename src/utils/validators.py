@@ -105,9 +105,51 @@ def validate_nickname(nick):
     """Проверяет корректность никнейма (только латинские буквы и цифры)"""
     return re.fullmatch(r'[A-Za-z0-9]+', nick) is not None
 
-def validate_password(pwd):
-    """Проверяет пароль на отсутствие кириллицы"""
-    return not re.search(r'[А-Яа-яЁё]', pwd)
+def validate_password(pwd: str) -> tuple[bool, str]:
+    """
+    Проверяет пароль на соответствие требованиям:
+    - Минимум 8 символов
+    - Только латинские буквы (A-Z, a-z), цифры (0-9) и основные специальные символы
+    
+    Args:
+        pwd: Пароль для проверки
+    
+    Returns:
+        Кортеж (is_valid, error_message)
+        is_valid: True если пароль валиден, False иначе
+        error_message: Сообщение об ошибке (пустая строка если валиден)
+    """
+    if not pwd:
+        return False, "Пароль не может быть пустым"
+    
+    # Проверка минимальной длины
+    if len(pwd) < 8:
+        return False, "Пароль должен содержать минимум 8 символов"
+    
+    # Проверка на кириллицу и другие недопустимые символы
+    if re.search(r'[А-Яа-яЁё]', pwd):
+        return False, "Пароль должен содержать только латинские буквы. Кириллица запрещена."
+    
+    # Проверка что используются только разрешенные символы: латиница, цифры, основные спецсимволы
+    # Разрешенные: A-Z, a-z, 0-9, и основные спецсимволы: !@#$%^&*()_+-=[]{}|;:,.<>?/
+    allowed_pattern = re.compile(r'^[A-Za-z0-9!@#$%^&*()_+\-=\[\]{}|;:,.<>?/]+$')
+    if not allowed_pattern.match(pwd):
+        return False, "Пароль содержит недопустимые символы. Используйте только латинские буквы, цифры и основные специальные символы."
+    
+    return True, ""
+
+def validate_password_simple(pwd: str) -> bool:
+    """
+    Простая проверка пароля (для обратной совместимости)
+    
+    Args:
+        pwd: Пароль для проверки
+    
+    Returns:
+        True если пароль валиден, False иначе
+    """
+    is_valid, _ = validate_password(pwd)
+    return is_valid
 
 def filter_text(text: str, max_length: int = 500, allow_email_chars: bool = False) -> str:
     """
