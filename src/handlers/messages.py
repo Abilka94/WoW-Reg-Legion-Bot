@@ -11,6 +11,7 @@ from aiogram.exceptions import TelegramBadRequest
 from ..states.user_states import RegistrationStates, ForgotPasswordStates, ChangePasswordStates, AdminStates
 from ..keyboards.user_keyboards import kb_main
 from ..utils.notifications import record_message, delete_user_message, delete_all_bot_messages
+from ..utils.validators import is_text_only
 
 logger = logging.getLogger("bot")
 
@@ -19,6 +20,62 @@ user_warning_msgs = {}
 
 def register_message_handlers(dp, pool, bot_instance):
     """Регистрирует общие обработчики сообщений"""
+    
+    # Обработчик для блокировки нежелательных типов сообщений (файлы, стикеры и т.д.)
+    # Этот обработчик должен быть ПЕРЕД общим обработчиком handle_private_messages
+    @dp.message(F.chat.type == ChatType.PRIVATE)
+    async def handle_non_text_messages(m: Message, state: FSMContext):
+        """Блокирует файлы, стикеры, эмодзи и другие нежелательные типы сообщений"""
+        current_state = await state.get_state()
+        
+        # Пропускаем сообщения в состояниях FSM (они обрабатываются отдельно)
+        if current_state in (
+            RegistrationStates.nick.state,
+            RegistrationStates.pwd.state,
+            RegistrationStates.pwd_confirm_weak.state,
+            RegistrationStates.mail.state,
+            ChangePasswordStates.new_password.state,
+            ChangePasswordStates.password_confirm_weak.state,
+            AdminStates.delete_account_input.state
+        ):
+            # В FSM состояниях тоже блокируем нежелательные типы
+            if not is_text_only(m):
+                try:
+                    await m.delete()
+                except Exception:
+                    pass
+            return
+        
+        # Блокируем все нежелательные типы сообщений (кроме команд)
+        if not is_text_only(m):
+            # Команды обрабатываются отдельно, пропускаем их
+            if m.text and m.text.startswith("/"):
+                return
+            try:
+                await m.delete()
+            except Exception:
+                pass
+            return
+        
+        # Если это текстовое сообщение, но не команда - обрабатываем дальше
+        if m.text and not m.text.startswith("/"):
+            # Пропускаем сообщения в состояниях FSM (они обрабатываются отдельными обработчиками)
+            if current_state in (
+                RegistrationStates.nick.state,
+                RegistrationStates.pwd.state,
+                RegistrationStates.pwd_confirm_weak.state,
+                RegistrationStates.mail.state,
+                ChangePasswordStates.new_password.state,
+                ChangePasswordStates.password_confirm_weak.state,
+                AdminStates.delete_account_input.state
+            ):
+                return
+            
+            # Вне процесса регистрации - просто удаляем сообщение пользователя без ответа
+            try:
+                await m.delete()
+            except Exception:
+                pass
     
     @dp.message(F.chat.type == ChatType.PRIVATE)
     async def handle_private_messages(m: Message, state: FSMContext):

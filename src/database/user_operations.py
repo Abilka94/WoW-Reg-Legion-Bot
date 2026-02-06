@@ -184,15 +184,19 @@ async def delete_account(pool, telegram_id, email):
             
             # Удаление записей
             await cur.execute("DELETE FROM account WHERE email=%s", (mu,))
+            account_deleted = cur.rowcount > 0
             await cur.execute("DELETE FROM battlenet_accounts WHERE email=%s", (mu,))
+            battlenet_deleted = cur.rowcount > 0
             await cur.execute("DELETE FROM users WHERE telegram_id=%s AND email=%s", (telegram_id, mu))
+            users_deleted = cur.rowcount > 0
             
-            affected = cur.rowcount
-            if affected:
+            # Проверяем, что хотя бы одна таблица была затронута
+            success = account_deleted or battlenet_deleted or users_deleted
+            if success:
                 logger.info(f"Аккаунт успешно удален: telegram_id={telegram_id}, email={mu}")
             else:
                 logger.warning(f"Не удалось удалить аккаунт: telegram_id={telegram_id}, email={mu}")
-            return affected > 0
+            return success
 
 async def get_account_by_email(pool, email):
     """Получает информацию об аккаунте по email (username, telegram_id)"""
@@ -232,12 +236,16 @@ async def admin_delete_account(pool, email):
                 await cur.execute("DELETE FROM account_access WHERE id=%s", (account_id,))
             
             await cur.execute("DELETE FROM account WHERE email=%s", (mu,))
+            account_deleted = cur.rowcount > 0
             await cur.execute("DELETE FROM battlenet_accounts WHERE email=%s", (mu,))
+            battlenet_deleted = cur.rowcount > 0
             await cur.execute("DELETE FROM users WHERE email=%s", (mu,))
+            users_deleted = cur.rowcount > 0
             
-            affected = cur.rowcount
-            if affected:
+            # Проверяем, что хотя бы одна таблица была затронута
+            success = account_deleted or battlenet_deleted or users_deleted
+            if success:
                 logger.info(f"Админ удалил аккаунт: email={mu}, telegram_id={telegram_id}")
             else:
                 logger.warning(f"Админ не смог удалить аккаунт: email={mu}")
-            return affected > 0, telegram_id
+            return success, telegram_id

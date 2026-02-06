@@ -19,7 +19,7 @@ DB_USER = os.getenv("DB_USER", "spp_user")
 DB_PASS = os.getenv("DB_PASSWORD", "123456")
 DB_NAME = os.getenv("DB_NAME", "legion_auth")
 REDIS_DSN = os.getenv("REDIS_DSN", "redis://127.0.0.1:6379/0")
-BOT_VERSION = "1.6.3"
+BOT_VERSION = "1.7.0"
 
 # Конфигурация по умолчанию
 DEFAULT_CONFIG = {

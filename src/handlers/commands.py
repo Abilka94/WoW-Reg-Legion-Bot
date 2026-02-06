@@ -27,7 +27,7 @@ def register_command_handlers(dp, pool, bot_instance):
     async def cmd_start(m: Message, state: FSMContext):
         await state.clear()
         await delete_all_bot_messages(m.from_user.id, bot_instance)
-        msg = await m.answer(T["start"], reply_markup=kb_main())
+        msg = await m.answer(T["start"], reply_markup=kb_main(is_admin=m.from_user.id == ADMIN_ID))
         record_message(m.from_user.id, msg, "command")
         await delete_user_message(m)
 
@@ -97,10 +97,11 @@ def register_callback_handlers(dp, pool, bot_instance):
     async def cb_back(c: CallbackQuery, state: FSMContext):
         await state.clear()
         await delete_all_bot_messages(c.from_user.id, bot_instance)
+        is_admin = c.from_user.id == ADMIN_ID
         try:
-            msg = await c.message.edit_text(T["start"], reply_markup=kb_main())
+            msg = await c.message.edit_text(T["start"], reply_markup=kb_main(is_admin=is_admin))
         except:
-            msg = await bot_instance.send_message(c.from_user.id, T["start"], reply_markup=kb_main())
+            msg = await bot_instance.send_message(c.from_user.id, T["start"], reply_markup=kb_main(is_admin=is_admin))
         record_message(c.from_user.id, msg, "command")
         await c.answer()
 
@@ -151,3 +152,36 @@ def register_callback_handlers(dp, pool, bot_instance):
         except:
             pass
         await c.answer()
+
+    if CONFIG["features"]["admin_panel"]:
+        @dp.callback_query(F.data == "admin_main")
+        async def cb_admin_main(c: CallbackQuery, state: FSMContext):
+            if not CONFIG["features"]["admin_panel"]:
+                await c.answer(T["feature_disabled"], show_alert=True)
+                return
+            
+            await state.clear()
+            await delete_all_bot_messages(c.from_user.id, bot_instance)
+            msg = await bot_instance.send_message(c.from_user.id, T["start"], reply_markup=kb_main(is_admin=c.from_user.id == ADMIN_ID))
+            record_message(c.from_user.id, msg, "command")
+            await c.answer()
+
+        @dp.callback_query(F.data == "open_admin_panel")
+        async def cb_open_admin_panel(c: CallbackQuery, state: FSMContext):
+            await state.clear()
+            if c.from_user.id != ADMIN_ID:
+                await c.answer(T["no_access"], show_alert=True)
+                return
+            
+            try:
+                msg = await c.message.edit_text(T["admin_panel"], reply_markup=kb_admin())
+            except:
+                msg = await bot_instance.send_message(c.from_user.id, T["admin_panel"], reply_markup=kb_admin())
+            record_message(c.from_user.id, msg, "command")
+            await c.answer()
+
+    # Обработчик для необработанных callback
+    @dp.callback_query()
+    async def cb_other(c: CallbackQuery):
+        await c.answer("🔧 Функция в разработке")
+        logger.info(f"Необработанный callback: {c.data}")

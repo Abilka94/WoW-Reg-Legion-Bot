@@ -8,7 +8,7 @@ from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKe
 from aiogram.fsm.context import FSMContext
 from aiogram.exceptions import TelegramBadRequest
 
-from ..config.settings import CONFIG
+from ..config.settings import CONFIG, ADMIN_ID
 from ..config.translations import TRANSLATIONS as T
 from ..states.user_states import RegistrationStates
 from ..keyboards.user_keyboards import kb_main, kb_wizard, kb_password_weak_choice
@@ -34,15 +34,14 @@ def register_registration_handlers(dp, pool, bot_instance):
             return
         
         await state.clear()
-        await delete_all_bot_messages(c.from_user.id)
+        await delete_all_bot_messages(c.from_user.id, bot_instance)
         await state.set_state(RegistrationStates.nick)
         text = f"1/3 · {T['progress'][0]}"
         
         try:
             msg = await c.message.edit_text(text, reply_markup=kb_wizard(0))
         except:
-            from ..main import bot
-            msg = await bot.send_message(c.from_user.id, text, reply_markup=kb_wizard(0))
+            msg = await bot_instance.send_message(c.from_user.id, text, reply_markup=kb_wizard(0))
         
         user_wizard_msg[c.from_user.id] = msg.message_id
         record_message(c.from_user.id, msg, "conversation")
@@ -59,9 +58,8 @@ def register_registration_handlers(dp, pool, bot_instance):
         
         if c.data == "wiz_cancel":
             await state.clear()
-            await delete_all_bot_messages(c.from_user.id)
-            from ..main import bot
-            msg = await bot.send_message(c.from_user.id, T["start"], reply_markup=kb_main())
+            await delete_all_bot_messages(c.from_user.id, bot_instance)
+            msg = await bot_instance.send_message(c.from_user.id, T["start"], reply_markup=kb_main(is_admin=c.from_user.id == ADMIN_ID))
             record_message(c.from_user.id, msg, "command")
             logger.info(f"Регистрация отменена для user_id={c.from_user.id}")
             await c.answer()
@@ -69,9 +67,8 @@ def register_registration_handlers(dp, pool, bot_instance):
         
         if cur == RegistrationStates.nick.state:
             await state.clear()
-            await delete_all_bot_messages(c.from_user.id)
-            from ..main import bot
-            msg = await bot.send_message(c.from_user.id, T["start"], reply_markup=kb_main())
+            await delete_all_bot_messages(c.from_user.id, bot_instance)
+            msg = await bot_instance.send_message(c.from_user.id, T["start"], reply_markup=kb_main(is_admin=c.from_user.id == ADMIN_ID))
             record_message(c.from_user.id, msg, "command")
             logger.info(f"Возврат в главное меню из RegistrationStates.nick для user_id={c.from_user.id}")
             await c.answer()
@@ -81,16 +78,14 @@ def register_registration_handlers(dp, pool, bot_instance):
             await state.set_state(RegistrationStates.nick)
             text = f"1/3 · {T['progress'][0]}"
             try:
-                from ..main import bot
-                await bot.edit_message_text(
+                await bot_instance.edit_message_text(
                     text=text,
                     chat_id=c.message.chat.id,
                     message_id=user_wizard_msg.get(c.from_user.id),
                     reply_markup=kb_wizard(0)
                 )
             except:
-                from ..main import bot
-                msg = await bot.send_message(c.from_user.id, text, reply_markup=kb_wizard(0))
+                msg = await bot_instance.send_message(c.from_user.id, text, reply_markup=kb_wizard(0))
                 user_wizard_msg[c.from_user.id] = msg.message_id
                 record_message(c.from_user.id, msg, "conversation")
             logger.info(f"Возврат к RegistrationStates.nick для user_id={c.from_user.id}")
@@ -101,16 +96,14 @@ def register_registration_handlers(dp, pool, bot_instance):
             await state.set_state(RegistrationStates.pwd)
             text = f"2/3 · {T['progress'][1]}"
             try:
-                from ..main import bot
-                await bot.edit_message_text(
+                await bot_instance.edit_message_text(
                     text=text,
                     chat_id=c.message.chat.id,
                     message_id=user_wizard_msg.get(c.from_user.id),
                     reply_markup=kb_wizard(1)
                 )
             except:
-                from ..main import bot
-                msg = await bot.send_message(c.from_user.id, text, reply_markup=kb_wizard(1))
+                msg = await bot_instance.send_message(c.from_user.id, text, reply_markup=kb_wizard(1))
                 user_wizard_msg[c.from_user.id] = msg.message_id
                 record_message(c.from_user.id, msg, "conversation")
             logger.info(f"Возврат к RegistrationStates.pwd для user_id={c.from_user.id}")
@@ -129,8 +122,7 @@ def register_registration_handlers(dp, pool, bot_instance):
         if m.text and (len(m.text.strip()) > 50 or " " in m.text.strip() or not m.text.strip()):
             await state.clear()
             await delete_user_message(m)
-            from ..main import bot
-            msg = await bot.send_message(m.from_user.id, T["start"], reply_markup=kb_main())
+            msg = await bot_instance.send_message(m.from_user.id, T["start"], reply_markup=kb_main(is_admin=m.from_user.id == ADMIN_ID))
             record_message(m.from_user.id, msg, "command")
             logger.info(f"Очистка зависшего состояния регистрации для user_id={m.from_user.id}")
             return
@@ -153,16 +145,14 @@ def register_registration_handlers(dp, pool, bot_instance):
         text = f"2/3 · {T['progress'][1]}"
         
         try:
-            from ..main import bot
-            await bot.edit_message_text(
+            await bot_instance.edit_message_text(
                 text=text,
                 chat_id=m.chat.id,
                 message_id=user_wizard_msg.get(m.from_user.id),
                 reply_markup=kb_wizard(1)
             )
         except:
-            from ..main import bot
-            msg = await bot.send_message(m.from_user.id, text, reply_markup=kb_wizard(1))
+            msg = await bot_instance.send_message(m.from_user.id, text, reply_markup=kb_wizard(1))
             user_wizard_msg[m.from_user.id] = msg.message_id
             record_message(m.from_user.id, msg, "conversation")
         
@@ -180,8 +170,7 @@ def register_registration_handlers(dp, pool, bot_instance):
         if m.text and (len(m.text.strip()) > 100 or not m.text.strip()):
             await state.clear()
             await delete_user_message(m)
-            from ..main import bot
-            msg = await bot.send_message(m.from_user.id, T["start"], reply_markup=kb_main())
+            msg = await bot_instance.send_message(m.from_user.id, T["start"], reply_markup=kb_main(is_admin=m.from_user.id == ADMIN_ID))
             record_message(m.from_user.id, msg, "command")
             logger.info(f"Очистка зависшего состояния регистрации (pwd) для user_id={m.from_user.id}")
             return
@@ -208,17 +197,16 @@ def register_registration_handlers(dp, pool, bot_instance):
             await state.update_data(pwd=pwd)
             await state.set_state(RegistrationStates.pwd_confirm_weak)
             warning_text = T["password_weak_warning"].format(warning=warning_msg)
-            from ..main import bot
             wizard_id = user_wizard_msg.get(m.from_user.id)
             try:
-                await bot.edit_message_text(
+                await bot_instance.edit_message_text(
                     text=warning_text,
                     chat_id=m.chat.id,
                     message_id=wizard_id,
                     reply_markup=kb_password_weak_choice()
                 )
             except:
-                msg = await bot.send_message(m.from_user.id, warning_text, reply_markup=kb_password_weak_choice())
+                msg = await bot_instance.send_message(m.from_user.id, warning_text, reply_markup=kb_password_weak_choice())
                 user_wizard_msg[m.from_user.id] = msg.message_id
                 record_message(m.from_user.id, msg, "conversation")
             return
@@ -229,16 +217,14 @@ def register_registration_handlers(dp, pool, bot_instance):
         text = f"3/3 · {T['progress'][2]}"
         
         try:
-            from ..main import bot
-            await bot.edit_message_text(
+            await bot_instance.edit_message_text(
                 text=text,
                 chat_id=m.chat.id,
                 message_id=user_wizard_msg.get(m.from_user.id),
                 reply_markup=kb_wizard(2)
             )
         except:
-            from ..main import bot
-            msg = await bot.send_message(m.from_user.id, text, reply_markup=kb_wizard(2))
+            msg = await bot_instance.send_message(m.from_user.id, text, reply_markup=kb_wizard(2))
             user_wizard_msg[m.from_user.id] = msg.message_id
             record_message(m.from_user.id, msg, "conversation")
         
@@ -256,8 +242,7 @@ def register_registration_handlers(dp, pool, bot_instance):
         if m.text and (len(m.text.strip()) > 254 or not m.text.strip()):
             await state.clear()
             await delete_user_message(m)
-            from ..main import bot
-            msg = await bot.send_message(m.from_user.id, T["start"], reply_markup=kb_main())
+            msg = await bot_instance.send_message(m.from_user.id, T["start"], reply_markup=kb_main(is_admin=m.from_user.id == ADMIN_ID))
             record_message(m.from_user.id, msg, "command")
             logger.info(f"Очистка зависшего состояния регистрации (mail) для user_id={m.from_user.id}")
             return
@@ -282,25 +267,75 @@ def register_registration_handlers(dp, pool, bot_instance):
         try:
             login, error = await register_user(pool, data["nick"], data["pwd"], email, m.from_user.id)
             await state.clear()
-            await delete_all_bot_messages(m.from_user.id)
+            await delete_all_bot_messages(m.from_user.id, bot_instance)
             
             if login:
                 msg = await m.answer(
                     T["success"].format(username=login),
-                    reply_markup=kb_main()
+                    reply_markup=kb_main(is_admin=m.from_user.id == ADMIN_ID)
                 )
                 record_message(m.from_user.id, msg, "command")
             else:
                 error_msg = T[error].format(max_accounts=CONFIG["settings"]["max_accounts_per_user"])
-                msg = await m.answer(error_msg, reply_markup=kb_main())
+                msg = await m.answer(error_msg, reply_markup=kb_main(is_admin=m.from_user.id == ADMIN_ID))
                 record_message(m.from_user.id, msg, "command")
         
         except pymysql.err.IntegrityError as e:
             logger.error(f"Не удалось зарегистрировать пользователя с e-mail {email}: {e}")
             await state.clear()
-            await delete_all_bot_messages(m.from_user.id)
-            msg = await m.answer(T["err_exists"], reply_markup=kb_main())
+            await delete_all_bot_messages(m.from_user.id, bot_instance)
+            msg = await m.answer(T["err_exists"], reply_markup=kb_main(is_admin=m.from_user.id == ADMIN_ID))
             record_message(m.from_user.id, msg, "command")
         
         await delete_user_message(m)
         logger.info(f"Завершение регистрации для user_id={m.from_user.id}, email={email}")
+
+    @dp.callback_query(F.data == "use_weak_password")
+    async def cb_use_weak_password(c: CallbackQuery, state: FSMContext):
+        """Обработчик выбора использования простого пароля при регистрации"""
+        data = await state.get_data()
+        current_state = await state.get_state()
+        
+        if current_state == RegistrationStates.pwd_confirm_weak.state:
+            # Используем пароль для регистрации
+            pwd = data.get("pwd")
+            await state.update_data(pwd=pwd)
+            await state.set_state(RegistrationStates.mail)
+            text = f"3/3 · {T['progress'][2]}"
+            
+            wizard_id = user_wizard_msg.get(c.from_user.id)
+            try:
+                await bot_instance.edit_message_text(
+                    text=text,
+                    chat_id=c.message.chat.id,
+                    message_id=wizard_id if wizard_id else c.message.message_id,
+                    reply_markup=kb_wizard(2)
+                )
+            except:
+                msg = await bot_instance.send_message(c.from_user.id, text, reply_markup=kb_wizard(2))
+                user_wizard_msg[c.from_user.id] = msg.message_id
+                record_message(c.from_user.id, msg, "conversation")
+            await c.answer()
+
+    @dp.callback_query(F.data == "change_weak_password")
+    async def cb_change_weak_password(c: CallbackQuery, state: FSMContext):
+        """Обработчик выбора ввода нового пароля при регистрации"""
+        current_state = await state.get_state()
+        
+        if current_state == RegistrationStates.pwd_confirm_weak.state:
+            # Возвращаемся к вводу пароля
+            await state.set_state(RegistrationStates.pwd)
+            text = f"2/3 · {T['progress'][1]}"
+            wizard_id = user_wizard_msg.get(c.from_user.id)
+            try:
+                await bot_instance.edit_message_text(
+                    text=text,
+                    chat_id=c.message.chat.id,
+                    message_id=wizard_id if wizard_id else c.message.message_id,
+                    reply_markup=kb_wizard(1)
+                )
+            except:
+                msg = await bot_instance.send_message(c.from_user.id, text, reply_markup=kb_wizard(1))
+                user_wizard_msg[c.from_user.id] = msg.message_id
+                record_message(c.from_user.id, msg, "conversation")
+            await c.answer()
