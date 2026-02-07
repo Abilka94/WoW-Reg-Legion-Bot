@@ -190,6 +190,12 @@ async def main():
     register_admin_handlers(dp, pool, bot)
     register_message_handlers(dp, pool, bot)
     
+    # Универсальный обработчик для необработанных callback (должен быть последним)
+    @dp.callback_query()
+    async def cb_other(c: CallbackQuery):
+        await c.answer("🔧 Функция в разработке")
+        logger.info(f"Необработанный callback: {c.data}")
+    
     logger.info("Все модульные обработчики зарегистрированы")
     logger.info("Полнофункциональный бот запущен и готов к работе")
     

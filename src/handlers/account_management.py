@@ -20,7 +20,54 @@ logger = logging.getLogger("bot")
 def register_account_handlers(dp, pool, bot_instance):
     """Регистрирует обработчики управления аккаунтами"""
     
+    # Обработчики use_weak_password и change_weak_password для смены пароля
+    # (регистрируются вне условия, так как используются и в регистрации, и в смене пароля)
+    @dp.callback_query(F.data == "use_weak_password")
+    async def cb_use_weak_password(c: CallbackQuery, state: FSMContext):
+        """Обработчик выбора использования простого пароля при смене пароля"""
+        data = await state.get_data()
+        current_state = await state.get_state()
+        
+        if current_state == ChangePasswordStates.password_confirm_weak.state:
+            # Используем пароль для смены
+            new_password = data.get("new_password")
+            email = data.get("email")
+            try:
+                await change_password(pool, email, new_password)
+                await state.clear()
+                await delete_all_bot_messages(c.from_user.id, bot_instance)
+                msg = await bot_instance.send_message(c.from_user.id, T["change_password_success"], reply_markup=kb_main(is_admin=c.from_user.id == ADMIN_ID))
+                record_message(c.from_user.id, msg, "command")
+                await c.answer("✅ Пароль успешно изменен!")
+            except Exception as e:
+                logger.error(f"Ошибка при смене пароля: {e}")
+                await state.clear()
+                await c.answer("❌ Ошибка при смене пароля", show_alert=True)
+
+    @dp.callback_query(F.data == "change_weak_password")
+    async def cb_change_weak_password(c: CallbackQuery, state: FSMContext):
+        """Обработчик выбора ввода нового пароля при смене пароля"""
+        current_state = await state.get_state()
+        
+        if current_state == ChangePasswordStates.password_confirm_weak.state:
+            # Возвращаемся к вводу пароля
+            await state.set_state(ChangePasswordStates.new_password)
+            text = T["change_password_prompt"]
+            try:
+                await bot_instance.edit_message_text(
+                    text=text,
+                    chat_id=c.message.chat.id,
+                    message_id=c.message.message_id,
+                    reply_markup=kb_back()
+                )
+            except:
+                msg = await bot_instance.send_message(c.from_user.id, text, reply_markup=kb_back())
+                record_message(c.from_user.id, msg, "command")
+            await c.answer()
+    
     if CONFIG["features"]["account_management"]:
+        logger.info("Регистрация обработчиков управления аккаунтами")
+        
         @dp.callback_query(F.data == "my_account")
         async def cb_acc(c: CallbackQuery, state: FSMContext):
             if not CONFIG["features"]["account_management"]:
@@ -207,47 +254,4 @@ def register_account_handlers(dp, pool, bot_instance):
             text = T["delete_account_success"] + "\n\n" + T["select_account_prompt"]
             msg = await bot_instance.send_message(c.from_user.id, text, reply_markup=kb_account_list(accounts))
             record_message(c.from_user.id, msg, "command")
-            await c.answer()
-
-    @dp.callback_query(F.data == "use_weak_password")
-    async def cb_use_weak_password(c: CallbackQuery, state: FSMContext):
-        """Обработчик выбора использования простого пароля при смене пароля"""
-        data = await state.get_data()
-        current_state = await state.get_state()
-        
-        if current_state == ChangePasswordStates.password_confirm_weak.state:
-            # Используем пароль для смены
-            new_password = data.get("new_password")
-            email = data.get("email")
-            try:
-                await change_password(pool, email, new_password)
-                await state.clear()
-                await delete_all_bot_messages(c.from_user.id, bot_instance)
-                msg = await bot_instance.send_message(c.from_user.id, T["change_password_success"], reply_markup=kb_main(is_admin=c.from_user.id == ADMIN_ID))
-                record_message(c.from_user.id, msg, "command")
-                await c.answer("✅ Пароль успешно изменен!")
-            except Exception as e:
-                logger.error(f"Ошибка при смене пароля: {e}")
-                await state.clear()
-                await c.answer("❌ Ошибка при смене пароля", show_alert=True)
-
-    @dp.callback_query(F.data == "change_weak_password")
-    async def cb_change_weak_password(c: CallbackQuery, state: FSMContext):
-        """Обработчик выбора ввода нового пароля при смене пароля"""
-        current_state = await state.get_state()
-        
-        if current_state == ChangePasswordStates.password_confirm_weak.state:
-            # Возвращаемся к вводу пароля
-            await state.set_state(ChangePasswordStates.new_password)
-            text = T["change_password_prompt"]
-            try:
-                await bot_instance.edit_message_text(
-                    text=text,
-                    chat_id=c.message.chat.id,
-                    message_id=c.message.message_id,
-                    reply_markup=kb_back()
-                )
-            except:
-                msg = await bot_instance.send_message(c.from_user.id, text, reply_markup=kb_back())
-                record_message(c.from_user.id, msg, "command")
             await c.answer()
