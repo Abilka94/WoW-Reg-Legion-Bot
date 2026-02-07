@@ -60,6 +60,7 @@ def register_admin_handlers(dp, pool, bot_instance):
             
             await state.clear()
             await delete_all_bot_messages(m.from_user.id, bot_instance)
+            await delete_user_message(m)
             
             try:
                 async with pool.acquire() as conn:
@@ -81,9 +82,10 @@ def register_admin_handlers(dp, pool, bot_instance):
                 logger.error(f"Ошибка при выполнении рассылки: {e}")
                 txt = f"❌ {e}"
             
-            msg = await m.answer(txt, reply_markup=kb_admin_back())
+            # Показываем результат рассылки, затем сразу возвращаемся в админ панель
+            # Редактируем сообщение с результатом в админ панель при нажатии на кнопку
+            msg = await bot_instance.send_message(m.from_user.id, txt, reply_markup=kb_admin_back())
             record_message(m.from_user.id, msg, "command")
-            await delete_user_message(m)
 
     if CONFIG["features"]["admin_check_db"]:
         @dp.callback_query(F.data == "admin_check_db")

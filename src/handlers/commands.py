@@ -121,10 +121,14 @@ def register_callback_handlers(dp, pool, bot_instance):
                 await c.answer()
                 return
             
+            # Удаляем текущее сообщение (с результатом рассылки или другим содержимым) перед показом админ панели
             try:
-                msg = await c.message.edit_text(T["admin_panel"], reply_markup=kb_admin())
+                await c.message.delete()
             except:
-                msg = await bot_instance.send_message(c.from_user.id, T["admin_panel"], reply_markup=kb_admin())
+                pass
+            
+            # Показываем админ панель
+            msg = await bot_instance.send_message(c.from_user.id, T["admin_panel"], reply_markup=kb_admin())
             record_message(c.from_user.id, msg, "command")
             await c.answer()
 
