@@ -64,6 +64,18 @@ def setup_logging():
     
     return logger
 
+def init_config_files():
+    """Инициализация конфигурационных файлов, если они не существуют"""
+    config_files = ["connection_info.txt", "news.txt"]
+    for file_path in config_files:
+        if not os.path.exists(file_path):
+            try:
+                with open(file_path, "w", encoding="utf-8") as f:
+                    pass  # Создаем пустой файл
+                logging.info(f"Создан пустой файл конфигурации: {file_path}")
+            except Exception as e:
+                logging.error(f"Ошибка при создании файла {file_path}: {e}")
+
 # Глобальные переменные для состояний
 user_wizard_msg = {}
 main_menu_msgs = {}
@@ -88,6 +100,9 @@ async def main():
     
     # Загрузка конфигурации
     load_config()
+    
+    # Инициализация конфигурационных файлов
+    init_config_files()
     
     # Создание бота
     bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
