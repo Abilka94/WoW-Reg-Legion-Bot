@@ -69,6 +69,10 @@ Thumbs.db
 # Redis dumps
 dump.rdb
 
+# Auto-generated config files (created on first run)
+connection_info.txt
+news.txt
+
 # Coverage reports
 htmlcov/
 .coverage
