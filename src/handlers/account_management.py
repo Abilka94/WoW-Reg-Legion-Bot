@@ -9,7 +9,7 @@ from aiogram.exceptions import TelegramBadRequest
 
 from ..config.settings import CONFIG, ADMIN_ID
 from ..config.translations import TRANSLATIONS as T
-from ..states.user_states import ChangePasswordStates
+from ..states.user_states import ChangePasswordStates, UserAccountStates
 from ..keyboards.user_keyboards import kb_main, kb_back, kb_account_list, kb_password_weak_choice
 from ..utils.validators import validate_email, validate_password, check_password_strength
 from ..utils.notifications import record_message, delete_all_bot_messages, delete_user_message
@@ -235,23 +235,77 @@ def register_account_handlers(dp, pool, bot_instance):
                 return
             
             email = c.data.replace("delete_account_", "")
-            success = await delete_account(pool, c.from_user.id, email)
-            await delete_all_bot_messages(c.from_user.id, bot_instance)
+            accounts = await get_account_info(pool, c.from_user.id)
+            selected = next((acc for acc in accounts if acc[0] == email), None)
+            if not selected:
+                await c.answer(T["delete_account_error"], show_alert=True)
+                return
             
+            email, username, is_temp, temp_password = selected
+            await state.update_data(delete_email=email, delete_username=username)
+            await state.set_state(UserAccountStates.delete_confirm)
+            confirm_text = T["admin_delete_confirm"].format(email=email, username=username)
+            confirm_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [
+                    InlineKeyboardButton(text=T["admin_delete_confirm_yes"], callback_data="user_confirm_delete"),
+                    InlineKeyboardButton(text=T["admin_delete_confirm_no"], callback_data="user_cancel_delete")
+                ]
+            ])
+            try:
+                await c.message.edit_text(confirm_text, reply_markup=confirm_keyboard)
+            except TelegramBadRequest:
+                msg = await bot_instance.send_message(c.from_user.id, confirm_text, reply_markup=confirm_keyboard)
+                record_message(c.from_user.id, msg, "command")
+            await c.answer()
+
+        @dp.callback_query(F.data == "user_confirm_delete")
+        async def cb_user_confirm_delete(c: CallbackQuery, state: FSMContext):
+            if not CONFIG["features"]["account_management"]:
+                await c.answer(T["feature_disabled"], show_alert=True)
+                return
+            data = await state.get_data()
+            email = data.get("delete_email")
+            if not email:
+                await state.clear()
+                await c.answer(T["delete_account_error"], show_alert=True)
+                return
+            success = await delete_account(pool, c.from_user.id, email)
+            await state.clear()
+            await delete_all_bot_messages(c.from_user.id, bot_instance)
             if not success:
                 msg = await bot_instance.send_message(c.from_user.id, T["delete_account_error"], reply_markup=kb_back())
                 record_message(c.from_user.id, msg, "command")
                 await c.answer()
                 return
-            
             accounts = await get_account_info(pool, c.from_user.id)
             if not accounts:
-                msg = await bot_instance.send_message(c.from_user.id, T["account_no_account"], reply_markup=kb_back())
+                msg = await bot_instance.send_message(c.from_user.id, T["delete_account_success"] + "\n\n" + T["account_no_account"], reply_markup=kb_back())
                 record_message(c.from_user.id, msg, "command")
-                await c.answer()
-                return
-            
-            text = T["delete_account_success"] + "\n\n" + T["select_account_prompt"]
-            msg = await bot_instance.send_message(c.from_user.id, text, reply_markup=kb_account_list(accounts))
-            record_message(c.from_user.id, msg, "command")
+            else:
+                text = T["delete_account_success"] + "\n\n" + T["select_account_prompt"]
+                msg = await bot_instance.send_message(c.from_user.id, text, reply_markup=kb_account_list(accounts))
+                record_message(c.from_user.id, msg, "command")
+            await c.answer()
+
+        @dp.callback_query(F.data == "user_cancel_delete")
+        async def cb_user_cancel_delete(c: CallbackQuery, state: FSMContext):
+            data = await state.get_data()
+            email = data.get("delete_email")
+            await state.clear()
+            accounts = await get_account_info(pool, c.from_user.id)
+            selected = next((acc for acc in (accounts or []) if acc[0] == email), None) if email else None
+            if selected and accounts:
+                email, username, is_temp, temp_password = selected
+                pwd_status = T["reset_success"].format(password=temp_password) if is_temp else T["change_password_success"]
+                text = T["account_info"].format(username=username, email=email, password_status=pwd_status)
+                try:
+                    await c.message.edit_text(text, reply_markup=kb_account_list(accounts, selected_email=email))
+                except TelegramBadRequest:
+                    await delete_all_bot_messages(c.from_user.id, bot_instance)
+                    msg = await bot_instance.send_message(c.from_user.id, text, reply_markup=kb_account_list(accounts, selected_email=email))
+                    record_message(c.from_user.id, msg, "command")
+            else:
+                await delete_all_bot_messages(c.from_user.id, bot_instance)
+                msg = await bot_instance.send_message(c.from_user.id, T["select_account_prompt"], reply_markup=kb_account_list(accounts or []))
+                record_message(c.from_user.id, msg, "command")
             await c.answer()

@@ -24,3 +24,7 @@ class ChangePasswordStates(StatesGroup):
     """Состояния для смены пароля"""
     new_password = State()
     password_confirm_weak = State()  # Подтверждение использования простого пароля
+
+class UserAccountStates(StatesGroup):
+    """Состояния для управления аккаунтом пользователем"""
+    delete_confirm = State()  # Подтверждение удаления аккаунта
