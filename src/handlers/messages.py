@@ -1,108 +1,47 @@
 """
-Общие обработчики сообщений
+Обработчик общих сообщений — фильтр не-текста и «мусора».
 """
 import logging
-from aiogram import F
-from aiogram.types import Message
-from aiogram.enums import ChatType
-from aiogram.fsm.context import FSMContext
-from aiogram.exceptions import TelegramBadRequest
 
-from ..states.user_states import RegistrationStates, ForgotPasswordStates, ChangePasswordStates, AdminStates
+from ..config.settings import ADMIN_ID
+from ..config.translations import TRANSLATIONS as T
 from ..keyboards.user_keyboards import kb_main
-from ..utils.notifications import record_message, delete_user_message, delete_all_bot_messages
-from ..utils.validators import is_text_only
+from ..utils.notifications import record_message
 
 logger = logging.getLogger("bot")
 
-# Хранилище для ID последних предупреждающих сообщений (для предотвращения накопления)
-user_warning_msgs = {}
 
-def register_message_handlers(dp, pool, bot_instance):
-    """Регистрирует общие обработчики сообщений"""
-    
-    # Обработчик для блокировки нежелательных типов сообщений (файлы, стикеры и т.д.)
-    # Этот обработчик должен быть ПЕРЕД общим обработчиком handle_private_messages
-    @dp.message(F.chat.type == ChatType.PRIVATE)
-    async def handle_non_text_messages(m: Message, state: FSMContext):
-        """Блокирует файлы, стикеры, эмодзи и другие нежелательные типы сообщений"""
-        current_state = await state.get_state()
-        
-        # Пропускаем сообщения в состояниях FSM (они обрабатываются отдельно)
-        if current_state in (
-            RegistrationStates.nick.state,
-            RegistrationStates.pwd.state,
-            RegistrationStates.pwd_confirm_weak.state,
-            RegistrationStates.mail.state,
-            ChangePasswordStates.new_password.state,
-            ChangePasswordStates.password_confirm_weak.state,
-            AdminStates.delete_account_input.state
-        ):
-            # В FSM состояниях тоже блокируем нежелательные типы
-            if not is_text_only(m):
-                try:
-                    await m.delete()
-                except Exception:
-                    pass
-            return
-        
-        # Блокируем все нежелательные типы сообщений (кроме команд)
-        if not is_text_only(m):
-            # Команды обрабатываются отдельно, пропускаем их
-            if m.text and m.text.startswith("/"):
-                return
-            try:
-                await m.delete()
-            except Exception:
-                pass
-            return
-        
-        # Если это текстовое сообщение, но не команда - обрабатываем дальше
-        if m.text and not m.text.startswith("/"):
-            # Пропускаем сообщения в состояниях FSM (они обрабатываются отдельными обработчиками)
-            if current_state in (
-                RegistrationStates.nick.state,
-                RegistrationStates.pwd.state,
-                RegistrationStates.pwd_confirm_weak.state,
-                RegistrationStates.mail.state,
-                ChangePasswordStates.new_password.state,
-                ChangePasswordStates.password_confirm_weak.state,
-                AdminStates.delete_account_input.state
-            ):
-                return
-            
-            # Вне процесса регистрации - просто удаляем сообщение пользователя без ответа
-            try:
-                await m.delete()
-            except Exception:
-                pass
-    
-    @dp.message(F.chat.type == ChatType.PRIVATE)
-    async def handle_private_messages(m: Message, state: FSMContext):
-        current_state = await state.get_state()
-        
-        # Пропускаем сообщения в состояниях FSM (регистрация и другие процессы)
-        if current_state in (
-            RegistrationStates.nick.state,
-            RegistrationStates.pwd.state,
-            RegistrationStates.mail.state,
-            ForgotPasswordStates.email.state,
-            ChangePasswordStates.new_password.state,
-            AdminStates.broadcast_text.state,
-            AdminStates.delete_account_input.state
-        ):
-            return
-        
-        # Игнорируем команды (они обрабатываются отдельно)
-        if m.text and m.text.startswith("/"):
-            return
-        
-        # Вне процесса регистрации - просто удаляем сообщение пользователя без ответа
-        await delete_user_message(m)
-        # Не отправляем никаких ответов - просто удаляем невалидное сообщение
+async def handle_fallback_message(api, user_id, peer_id, event, msg_id):
+    """
+    Вызывается когда сообщение не было обработано ни одним хендлером.
+    В VK нет чётких типов «стикер/файл» на уровне message_new —
+    но есть attachments; если есть вложения и нет текста — игнорируем (пытаемся удалить).
+    """
+    attachments = event.get("object", {}).get("message", {}).get("attachments", [])
+    text = event.get("object", {}).get("message", {}).get("text", "")
 
-    @dp.message()
-    async def unknown(m: Message):
-        """Обработчик неизвестных сообщений"""
-        msg = await m.answer("❓ Используйте меню или /start")
-        record_message(m.from_user.id, msg, "command")
+    if attachments and not text.strip():
+        try:
+            await api.delete_message(peer_id, msg_id)
+        except Exception:
+            pass
+        return
+
+    if not text.strip():
+        return
+
+    mid = await api.send_message(
+        peer_id,
+        "Используйте меню или введите /start для начала.",
+        kb_main(is_admin=user_id == ADMIN_ID),
+    )
+    record_message(user_id, mid, "command")
+
+
+async def handle_fallback_callback(api, user_id, peer_id, cmd, event_id):
+    """Необработанный payload callback-кнопки."""
+    logger.info(f"Необработанный callback: {cmd} от vk_id={user_id}")
+    await api.send_event_answer(
+        event_id, user_id, peer_id,
+        {"type": "show_snackbar", "text": "🔧 Функция в разработке"},
+    )

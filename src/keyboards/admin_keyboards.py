@@ -1,32 +1,38 @@
 """
-Клавиатуры для администратора
+Клавиатуры для администратора — VK
 """
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from ..config.settings import CONFIG
 from ..config.translations import TRANSLATIONS as T
 
-def kb_admin():
-    """Панель администратора"""
-    buttons = []
-    
-    if CONFIG["features"]["admin_check_db"]:
-        buttons.append([InlineKeyboardButton(text=T["admin_db"], callback_data="admin_check_db")])
-    
-    if CONFIG["features"]["admin_broadcast"]:
-        buttons.append([InlineKeyboardButton(text=T["admin_bcast"], callback_data="admin_broadcast")])
-    
-    if CONFIG["features"]["admin_delete_account"]:
-        buttons.append([InlineKeyboardButton(text=T["admin_delete_account"], callback_data="admin_delete_account")])
-    
-    
-    if CONFIG["features"]["admin_reload_config"]:
-        buttons.append([InlineKeyboardButton(text=T["admin_reload_config"], callback_data="admin_reload_config")])
-    
-    buttons.append([InlineKeyboardButton(text=T["admin_main"], callback_data="admin_main")])
-    return InlineKeyboardMarkup(inline_keyboard=buttons)
 
-def kb_admin_back():
-    """Кнопка возврата в админ панель"""
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=T["admin_back"], callback_data="admin_back")]
-    ])
+def _btn(label: str, payload: str, color: str = "primary"):
+    return {
+        "action": {
+            "type": "callback",
+            "label": label,
+            "payload": f'{{"cmd":"{payload}"}}',
+        },
+        "color": color,
+    }
+
+
+def _inline_kb(rows):
+    return {"inline": True, "buttons": rows}
+
+
+def kb_admin() -> dict:
+    rows = []
+    if CONFIG["features"]["admin_check_db"]:
+        rows.append([_btn(T["admin_db"], "admin_check_db", "positive")])
+    if CONFIG["features"]["admin_broadcast"]:
+        rows.append([_btn(T["admin_bcast"], "admin_broadcast", "primary")])
+    if CONFIG["features"]["admin_delete_account"]:
+        rows.append([_btn(T["admin_delete_account"], "admin_delete_account", "negative")])
+    if CONFIG["features"]["admin_reload_config"]:
+        rows.append([_btn(T["admin_reload_config"], "admin_reload_config", "primary")])
+    rows.append([_btn(T["admin_main"], "admin_main", "secondary")])
+    return _inline_kb(rows)
+
+
+def kb_admin_back() -> dict:
+    return _inline_kb([[_btn(T["admin_back"], "admin_back", "primary")]])

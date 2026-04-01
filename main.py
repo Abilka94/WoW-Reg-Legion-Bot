@@ -1,230 +1,197 @@
 """
-Полнофункциональная версия модульного бота
+WoW Reg Bot — VK-версия.
+Bots Long Poll API, FSM на Redis, MySQL.
 """
 import asyncio
 import json
 import logging
 import os
-import secrets
-
-import redis.asyncio as aioredis
-from aiogram import Bot, Dispatcher, F
-from aiogram.enums import ParseMode, ChatType
-from aiogram.filters import Command
-from aiogram.fsm.context import FSMContext
-from aiogram.fsm.storage.redis import RedisStorage
-from aiogram.client.default import DefaultBotProperties
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, FSInputFile
-from aiogram.exceptions import TelegramBadRequest
 from logging.handlers import TimedRotatingFileHandler
 
-# Импорты модулей
-from src.config.settings import load_config, TOKEN, REDIS_DSN, BOT_VERSION, CONFIG, ADMIN_ID
-from src.config.translations import TRANSLATIONS as T
+from src.config.settings import load_config, VK_TOKEN, VK_GROUP_ID, BOT_VERSION, ADMIN_ID, REDIS_DSN
 from src.database.connection import get_pool
-from src.database.user_operations import (
-    get_account_info, delete_account, admin_delete_account, get_account_by_email,
-    register_user, reset_password, change_password
-)
+from src.states.fsm import FSMStorage
+from src.utils.vk_api import VkApi
+from src.utils.longpoll import BotLongPoll
 from src.utils.middleware import RateLimit
-from src.utils.notifications import safe_edit_message, delete_all_bot_messages, record_message
-from src.utils.validators import validate_email, validate_nickname, validate_password, filter_text, is_text_only, check_password_strength
-from src.keyboards.user_keyboards import kb_main, kb_back, kb_account_list, kb_password_weak_choice
-from src.keyboards.admin_keyboards import kb_admin, kb_admin_back
-from src.states.user_states import RegistrationStates, ForgotPasswordStates, ChangePasswordStates, AdminStates
 
-# Импорты модульных обработчиков
-from src.handlers.commands import register_command_handlers, register_callback_handlers
-from src.handlers.registration import register_registration_handlers
-from src.handlers.account_management import register_account_handlers
-from src.handlers.admin import register_admin_handlers
-from src.handlers.messages import register_message_handlers
+from src.handlers import commands as cmd_handler
+from src.handlers import registration as reg_handler
+from src.handlers import account_management as acc_handler
+from src.handlers import admin as admin_handler
+from src.handlers import messages as msg_handler
+
 
 def setup_logging():
-    """Настройка логирования"""
     logger = logging.getLogger("bot")
     logger.setLevel(logging.INFO)
-    
     fmt = logging.Formatter("%(asctime)s | %(levelname)s | %(message)s")
-    
-    # Обработчик для основного лога
+
     h_info = TimedRotatingFileHandler("bot.log", when="midnight", backupCount=7, encoding="utf-8")
     h_info.setLevel(logging.INFO)
     h_info.setFormatter(fmt)
     logger.addHandler(h_info)
-    
-    # Обработчик для ошибок
+
     h_err = TimedRotatingFileHandler("error.log", when="midnight", backupCount=7, encoding="utf-8")
     h_err.setLevel(logging.ERROR)
     h_err.setFormatter(fmt)
     logger.addHandler(h_err)
-    
-    # Консольный вывод
+
     logger.addHandler(logging.StreamHandler())
-    
     return logger
 
+
 def init_config_files():
-    """Инициализация конфигурационных файлов, если они не существуют"""
-    config_files = ["connection_info.txt", "news.txt"]
-    for file_path in config_files:
-        if not os.path.exists(file_path):
+    for fp in ("connection_info.txt", "news.txt"):
+        if not os.path.exists(fp):
             try:
-                with open(file_path, "w", encoding="utf-8") as f:
-                    pass  # Создаем пустой файл
-                logging.info(f"Создан пустой файл конфигурации: {file_path}")
+                with open(fp, "w", encoding="utf-8") as f:
+                    pass
+                logging.info(f"Создан пустой файл: {fp}")
             except Exception as e:
-                logging.error(f"Ошибка при создании файла {file_path}: {e}")
+                logging.error(f"Ошибка при создании {fp}: {e}")
 
-# Глобальные переменные для состояний
-user_wizard_msg = {}
-main_menu_msgs = {}
-admin_menu_msgs = {}
-# Хранилище для ID последних предупреждающих сообщений (для предотвращения накопления)
-user_warning_msgs = {}
 
-def kb_wizard(step):
-    """Клавиатура для мастера регистрации"""
-    btns = []
-    if step > 0:
-        btns.append(InlineKeyboardButton(text=T["back"], callback_data="wiz_back"))
-    btns.append(InlineKeyboardButton(text=T["cancel"], callback_data="wiz_cancel"))
-    return InlineKeyboardMarkup(inline_keyboard=[btns])
+def _parse_payload(raw) -> str | None:
+    """Извлекает cmd из payload (строка или dict)."""
+    if not raw:
+        return None
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except json.JSONDecodeError:
+            return None
+    if isinstance(raw, dict):
+        return raw.get("cmd")
+    return None
+
+
+async def dispatch_message(api, pool, fsm, rate_limit, event):
+    """Обработка события message_new."""
+    msg = event.get("object", {}).get("message", {})
+    user_id = msg.get("from_id", 0)
+    peer_id = msg.get("peer_id", user_id)
+    text = (msg.get("text") or "").strip()
+    msg_id = msg.get("conversation_message_id")
+
+    if user_id <= 0:
+        return
+
+    if not rate_limit.check(user_id):
+        return
+
+    try:
+        ctx = fsm.get_context(user_id)
+        cur_state = await ctx.get_state()
+
+        if text:
+            if await cmd_handler.handle_command(api, pool, user_id, peer_id, text, fsm, msg_id):
+                return
+
+        if cur_state and text:
+            if await reg_handler.handle_text(api, pool, user_id, peer_id, text, fsm, msg_id):
+                return
+            if await acc_handler.handle_text(api, pool, user_id, peer_id, text, fsm, msg_id):
+                return
+            if await admin_handler.handle_text(api, pool, user_id, peer_id, text, fsm, msg_id):
+                return
+
+        await msg_handler.handle_fallback_message(api, user_id, peer_id, event, msg_id)
+    finally:
+        rate_limit.release(user_id)
+
+
+async def dispatch_event(api, pool, fsm, rate_limit, event):
+    """Обработка события message_event (callback-кнопка)."""
+    obj = event.get("object", {})
+    user_id = obj.get("user_id", 0)
+    peer_id = obj.get("peer_id", user_id)
+    event_id = obj.get("event_id", "")
+    payload = obj.get("payload", {})
+    conv_msg_id = obj.get("conversation_message_id")
+
+    cmd = _parse_payload(payload)
+    if not cmd or user_id <= 0:
+        return
+
+    if not rate_limit.check(user_id, event_id):
+        try:
+            await api.send_event_answer(event_id, user_id, peer_id, {"type": "show_snackbar", "text": "⏱ Подождите..."})
+        except Exception:
+            pass
+        return
+
+    try:
+        if await cmd_handler.handle_callback(api, pool, user_id, peer_id, cmd, fsm, event_id, conv_msg_id):
+            return
+        if await reg_handler.handle_callback(api, pool, user_id, peer_id, cmd, fsm, event_id, conv_msg_id):
+            return
+        if await acc_handler.handle_callback(api, pool, user_id, peer_id, cmd, fsm, event_id, conv_msg_id):
+            return
+        if await admin_handler.handle_callback(api, pool, user_id, peer_id, cmd, fsm, event_id, conv_msg_id):
+            return
+
+        await msg_handler.handle_fallback_callback(api, user_id, peer_id, cmd, event_id)
+    finally:
+        rate_limit.release(user_id, event_id)
+
 
 async def main():
-    """Главная функция запуска бота"""
-    
-    # Настройка логирования
     logger = setup_logging()
-    logger.info(f"Запуск полнофункциональной версии бота {BOT_VERSION}")
-    
-    # Загрузка конфигурации
+    logger.info(f"Запуск VK-бота v{BOT_VERSION}")
+
+    if not VK_TOKEN or not VK_GROUP_ID:
+        logger.error("VK_TOKEN и VK_GROUP_ID обязательны в .env")
+        return
+
     load_config()
-    
-    # Инициализация конфигурационных файлов
     init_config_files()
-    
-    # Создание бота
-    bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
-    
-    # Настройка Redis и хранилища 
-    try:
-        redis_cli = aioredis.from_url(REDIS_DSN)
-        storage = RedisStorage(redis=redis_cli, state_ttl=3600)
-        logger.info("Redis подключен для FSM хранилища")
-    except Exception as e:
-        logger.warning(f"Redis недоступен, используется память: {e}")
-        storage = None
-    
-    # Создание диспетчера
-    dp = Dispatcher(storage=storage) if storage else Dispatcher()
-    
-    async def render_main_menu(chat_id: int, user_id: int, callback_or_message=None):
-        # Очищаем предупреждающие сообщения при возврате в главное меню
-        user_warning_msgs.pop(user_id, None)
-        kb = kb_main(is_admin=user_id == ADMIN_ID)
-        msg_id = main_menu_msgs.get(user_id)
-        
-        # Пытаемся отредактировать существующее сообщение, если оно есть
-        if msg_id:
-            try:
-                await bot.edit_message_text(
-                    text=T["start"],
-                    chat_id=chat_id,
-                    message_id=msg_id,
-                    reply_markup=kb
-                )
-                return
-            except (TelegramBadRequest, Exception):
-                # Если не удалось отредактировать, удаляем из кэша и создаем новое
-                main_menu_msgs.pop(user_id, None)
-        
-        # Если есть callback_or_message, пытаемся отредактировать его
-        if callback_or_message:
-            try:
-                msg = await safe_edit_message(bot, callback_or_message, T["start"], reply_markup=kb)
-                main_menu_msgs[user_id] = msg.message_id
-                return msg
-            except Exception:
-                pass
-        
-        # Создаем новое сообщение только если не удалось отредактировать существующее
-        msg = await bot.send_message(chat_id, T["start"], reply_markup=kb)
-        main_menu_msgs[user_id] = msg.message_id
-        return msg
 
-    async def render_admin_menu(chat_id: int, user_id: int, callback_or_message=None):
-        msg_id = admin_menu_msgs.get(user_id)
-        
-        # Пытаемся отредактировать существующее сообщение, если оно есть
-        if msg_id:
-            try:
-                await bot.edit_message_text(
-                    text=T["admin_panel"],
-                    chat_id=chat_id,
-                    message_id=msg_id,
-                    reply_markup=kb_admin()
-                )
-                return
-            except (TelegramBadRequest, Exception):
-                # Если не удалось отредактировать, удаляем из кэша и создаем новое
-                admin_menu_msgs.pop(user_id, None)
-        
-        # Если есть callback_or_message, пытаемся отредактировать его
-        if callback_or_message:
-            try:
-                msg = await safe_edit_message(bot, callback_or_message, T["admin_panel"], reply_markup=kb_admin())
-                admin_menu_msgs[user_id] = msg.message_id
-                return msg
-            except Exception:
-                pass
-        
-        # Создаем новое сообщение только если не удалось отредактировать существующее
-        msg = await bot.send_message(chat_id, T["admin_panel"], reply_markup=kb_admin())
-        admin_menu_msgs[user_id] = msg.message_id
-        return msg
+    api = VkApi(VK_TOKEN)
+    pool = None
+    fsm = FSMStorage(REDIS_DSN)
+    rate_limit = RateLimit()
 
-    
-    # Подключение middleware
-    dp.message.middleware(RateLimit())
-    dp.callback_query.middleware(RateLimit())
-    
-    # Подключение к базе данных
     try:
         pool = await get_pool()
-        logger.info("Подключение к базе данных установлено")
+        logger.info("MySQL подключен")
     except Exception as e:
-        logger.error(f"Ошибка подключения к БД: {e}")
-        pool = None
+        logger.error(f"Ошибка подключения к MySQL: {e}")
+        await api.close()
+        return
 
-    # Регистрация модульных обработчиков
-    register_command_handlers(dp, pool, bot)
-    register_callback_handlers(dp, pool, bot)
-    register_registration_handlers(dp, pool, bot)
-    register_account_handlers(dp, pool, bot)
-    register_admin_handlers(dp, pool, bot)
-    register_message_handlers(dp, pool, bot)
-    
-    # Универсальный обработчик для необработанных callback (должен быть последним)
-    @dp.callback_query()
-    async def cb_other(c: CallbackQuery):
-        await c.answer("🔧 Функция в разработке")
-        logger.info(f"Необработанный callback: {c.data}")
-    
-    logger.info("Все модульные обработчики зарегистрированы")
-    logger.info("Полнофункциональный бот запущен и готов к работе")
-    
     try:
-        await dp.start_polling(bot)
-    except KeyboardInterrupt:
-        logger.info("Бот остановлен пользователем")
+        await fsm.connect()
     except Exception as e:
-        logger.error(f"Критическая ошибка в polling: {e}")
-    finally:
+        logger.warning(f"Redis недоступен, FSM работать не будет: {e}")
+        await api.close()
         if pool:
             pool.close()
             await pool.wait_closed()
-        await bot.session.close()
+        return
+
+    lp = BotLongPoll(api, VK_GROUP_ID)
+    logger.info("Бот запущен, ожидание событий...")
+
+    try:
+        async for event in lp.listen():
+            etype = event.get("type")
+            if etype == "message_new":
+                asyncio.create_task(dispatch_message(api, pool, fsm, rate_limit, event))
+            elif etype == "message_event":
+                asyncio.create_task(dispatch_event(api, pool, fsm, rate_limit, event))
+    except KeyboardInterrupt:
+        logger.info("Бот остановлен")
+    except Exception as e:
+        logger.error(f"Критическая ошибка: {e}", exc_info=True)
+    finally:
+        await fsm.close()
+        if pool:
+            pool.close()
+            await pool.wait_closed()
+        await api.close()
+        logger.info("Ресурсы освобождены")
+
 
 if __name__ == "__main__":
     asyncio.run(main())

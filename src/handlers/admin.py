@@ -1,275 +1,251 @@
 """
-Обработчики для административных функций
+Административные обработчики — VK-версия.
+Проверка БД, рассылка, удаление аккаунта, перезагрузка конфига.
 """
 import logging
-import os
-from aiogram import F
-from aiogram.types import Message, CallbackQuery, FSInputFile, InlineKeyboardMarkup, InlineKeyboardButton
-from aiogram.fsm.context import FSMContext
 
 from ..config.settings import CONFIG, ADMIN_ID
 from ..config.translations import TRANSLATIONS as T
-from ..states.user_states import AdminStates
-from ..keyboards.admin_keyboards import kb_admin, kb_admin_back
+from ..states import user_states as S
 from ..keyboards.user_keyboards import kb_main, kb_back
+from ..keyboards.admin_keyboards import kb_admin, kb_admin_back
+from ..utils.notifications import record_message, delete_all_bot_messages, safe_send_or_edit, notify_admin
 from ..utils.validators import validate_email
-from ..utils.notifications import record_message, delete_all_bot_messages, delete_user_message, notify_admin, safe_edit_message
-from ..database.user_operations import admin_delete_account, get_account_by_email
+from ..database.user_operations import admin_delete_account, get_account_by_email, get_all_user_ids
 
 logger = logging.getLogger("bot")
 
-def register_admin_handlers(dp, pool, bot_instance):
-    """Регистрирует обработчики административных функций"""
-    
-    if CONFIG["features"]["admin_broadcast"]:
-        @dp.callback_query(F.data == "admin_broadcast")
-        async def cb_admin_bcast(c: CallbackQuery, state: FSMContext):
-            if not CONFIG["features"]["admin_broadcast"]:
-                await c.answer(T["feature_disabled"], show_alert=True)
-                return
-            
-            await state.clear()
-            await delete_all_bot_messages(c.from_user.id, bot_instance)
-            
-            if c.from_user.id != ADMIN_ID:
-                msg = await bot_instance.send_message(c.from_user.id, T["no_access"], reply_markup=kb_back())
-                record_message(c.from_user.id, msg, "command")
-                await c.answer()
-                return
-            
-            await state.set_state(AdminStates.broadcast_text)
-            msg = await bot_instance.send_message(c.from_user.id, "Введите текст рассылки:", reply_markup=kb_admin_back())
-            record_message(c.from_user.id, msg, "command")
-            await c.answer()
 
-        @dp.message(AdminStates.broadcast_text)
-        async def step_broadcast(m: Message, state: FSMContext):
-            if not CONFIG["features"]["admin_broadcast"]:
-                msg = await m.answer(T["feature_disabled"], reply_markup=kb_back())
-                record_message(m.from_user.id, msg, "command")
-                await delete_user_message(m)
-                return
-            
-            if m.text.strip() in (T["cancel"], T["admin_back"]):
-                await state.clear()
-                await delete_all_bot_messages(m.from_user.id)
-                msg = await m.answer(T["admin_panel"], reply_markup=kb_admin())
-                record_message(m.from_user.id, msg, "command")
-                await delete_user_message(m)
-                return
-            
-            await state.clear()
-            await delete_all_bot_messages(m.from_user.id, bot_instance)
-            await delete_user_message(m)
-            
-            try:
-                async with pool.acquire() as conn:
-                    async with conn.cursor() as cur:
-                        await cur.execute("SELECT telegram_id FROM users")
-                        users = await cur.fetchall()
-                
-                ok = fail = 0
-                for (uid,) in users:
+async def handle_callback(api, pool, user_id, peer_id, cmd, fsm, event_id, conv_msg_id):
+
+    if cmd == "admin_check_db":
+        if not CONFIG["features"]["admin_check_db"]:
+            await api.send_event_answer(event_id, user_id, peer_id, {"type": "show_snackbar", "text": T["feature_disabled"]})
+            return True
+        ctx = fsm.get_context(user_id)
+        await ctx.clear()
+        await delete_all_bot_messages(user_id, api)
+        if user_id != ADMIN_ID:
+            mid = await api.send_message(peer_id, T["no_access"], kb_back())
+            record_message(user_id, mid, "command")
+            await api.send_event_answer(event_id, user_id, peer_id)
+            return True
+        try:
+            async with pool.acquire():
+                pass
+            txt = T["db_ok"]
+        except Exception as e:
+            txt = f"❌ {e}"
+            await notify_admin(api, ADMIN_ID, str(e))
+            logger.error(f"Ошибка проверки БД: {e}")
+        mid = await api.send_message(peer_id, txt, kb_admin_back())
+        record_message(user_id, mid, "command")
+        await api.send_event_answer(event_id, user_id, peer_id)
+        return True
+
+    if cmd == "admin_broadcast":
+        if not CONFIG["features"]["admin_broadcast"]:
+            await api.send_event_answer(event_id, user_id, peer_id, {"type": "show_snackbar", "text": T["feature_disabled"]})
+            return True
+        ctx = fsm.get_context(user_id)
+        await ctx.clear()
+        await delete_all_bot_messages(user_id, api)
+        if user_id != ADMIN_ID:
+            mid = await api.send_message(peer_id, T["no_access"], kb_back())
+            record_message(user_id, mid, "command")
+            await api.send_event_answer(event_id, user_id, peer_id)
+            return True
+        await ctx.set_state(S.ADMIN_BROADCAST)
+        mid = await api.send_message(peer_id, "Введите текст рассылки:", kb_admin_back())
+        record_message(user_id, mid, "command")
+        await api.send_event_answer(event_id, user_id, peer_id)
+        return True
+
+    if cmd == "admin_delete_account":
+        if not CONFIG["features"]["admin_delete_account"]:
+            await api.send_event_answer(event_id, user_id, peer_id, {"type": "show_snackbar", "text": T["feature_disabled"]})
+            return True
+        ctx = fsm.get_context(user_id)
+        await ctx.clear()
+        await delete_all_bot_messages(user_id, api)
+        if user_id != ADMIN_ID:
+            mid = await api.send_message(peer_id, T["no_access"], kb_back())
+            record_message(user_id, mid, "command")
+            await api.send_event_answer(event_id, user_id, peer_id)
+            return True
+        await ctx.set_state(S.ADMIN_DELETE_INPUT)
+        mid = await api.send_message(peer_id, T["admin_delete_prompt"], kb_admin_back())
+        record_message(user_id, mid, "command")
+        await api.send_event_answer(event_id, user_id, peer_id)
+        return True
+
+    if cmd == "admin_confirm_delete":
+        if user_id != ADMIN_ID:
+            await api.send_event_answer(event_id, user_id, peer_id, {"type": "show_snackbar", "text": T["no_access"]})
+            return True
+        ctx = fsm.get_context(user_id)
+        data = await ctx.get_data()
+        email = data.get("email")
+        username = data.get("username")
+        if not email:
+            await ctx.clear()
+            await api.send_event_answer(event_id, user_id, peer_id, {"type": "show_snackbar", "text": "❌ Данные не найдены"})
+            mid = await safe_send_or_edit(api, peer_id, T["admin_panel"], kb_admin(), conv_msg_id)
+            record_message(user_id, mid, "command")
+            return True
+        try:
+            success, deleted_vk_id = await admin_delete_account(pool, email)
+            await ctx.clear()
+            if success:
+                if deleted_vk_id:
                     try:
-                        await bot_instance.send_message(uid, m.text)
-                        ok += 1
+                        notification_text = T["account_deleted_by_admin"].format(email=email, username=username)
+                        await api.send_message(deleted_vk_id, notification_text)
+                        logger.info(f"Уведомление отправлено vk_id {deleted_vk_id}")
                     except Exception as e:
-                        logger.warning(f"Не удалось отправить сообщение пользователю {uid}: {e}")
-                        fail += 1
-                
-                txt = f"✅ Успех: {ok} | ❌ Ошибок: {fail}"
-            except Exception as e:
-                logger.error(f"Ошибка при выполнении рассылки: {e}")
-                txt = f"❌ {e}"
-            
-            # Показываем результат рассылки, затем сразу возвращаемся в админ панель
-            # Редактируем сообщение с результатом в админ панель при нажатии на кнопку
-            msg = await bot_instance.send_message(m.from_user.id, txt, reply_markup=kb_admin_back())
-            record_message(m.from_user.id, msg, "command")
+                        logger.warning(f"Не удалось уведомить vk_id {deleted_vk_id}: {e}")
+                mid = await safe_send_or_edit(api, peer_id, T["admin_delete_success"].format(email=email), kb_admin_back(), conv_msg_id)
+            else:
+                mid = await safe_send_or_edit(api, peer_id, T["admin_delete_error"].format(error="Не удалось удалить"), kb_admin_back(), conv_msg_id)
+            record_message(user_id, mid, "command")
+        except Exception as e:
+            logger.error(f"Ошибка при удалении аккаунта админом: {e}")
+            await ctx.clear()
+            mid = await safe_send_or_edit(api, peer_id, T["admin_delete_error"].format(error=str(e)), kb_admin_back(), conv_msg_id)
+            record_message(user_id, mid, "command")
+        await api.send_event_answer(event_id, user_id, peer_id)
+        return True
 
-    if CONFIG["features"]["admin_check_db"]:
-        @dp.callback_query(F.data == "admin_check_db")
-        async def cb_admin_db(c: CallbackQuery, state: FSMContext):
-            if not CONFIG["features"]["admin_check_db"]:
-                await c.answer(T["feature_disabled"], show_alert=True)
-                return
-            
-            await state.clear()
-            await delete_all_bot_messages(c.from_user.id, bot_instance)
-            
-            if c.from_user.id != ADMIN_ID:
-                msg = await bot_instance.send_message(c.from_user.id, T["no_access"], reply_markup=kb_back())
-                record_message(c.from_user.id, msg, "command")
-                await c.answer()
-                return
-            
-            try:
-                async with pool.acquire():
-                    pass
-                txt = T["db_ok"]
-            except Exception as e:
-                txt = f"❌ {e}"
-                await notify_admin(bot_instance, str(e))
-                logger.error(f"Ошибка проверки базы данных: {e}")
-            
-            msg = await bot_instance.send_message(c.from_user.id, txt, reply_markup=kb_admin_back())
-            record_message(c.from_user.id, msg, "command")
-            await c.answer()
-    if CONFIG["features"]["admin_delete_account"]:
+    if cmd == "admin_reload_config":
+        if not CONFIG["features"]["admin_reload_config"]:
+            await api.send_event_answer(event_id, user_id, peer_id, {"type": "show_snackbar", "text": T["feature_disabled"]})
+            return True
+        ctx = fsm.get_context(user_id)
+        await ctx.clear()
+        await delete_all_bot_messages(user_id, api)
+        if user_id != ADMIN_ID:
+            mid = await api.send_message(peer_id, T["no_access"], kb_back())
+            record_message(user_id, mid, "command")
+            await api.send_event_answer(event_id, user_id, peer_id)
+            return True
+        try:
+            from ..config.settings import load_config
+            load_config()
+            mid = await api.send_message(peer_id, T["reload_config_success"], kb_admin())
+        except Exception as e:
+            logger.error(f"Ошибка перезагрузки конфига: {e}")
+            mid = await api.send_message(peer_id, T["reload_config_error"].format(error=str(e)), kb_admin())
+        record_message(user_id, mid, "command")
+        await api.send_event_answer(event_id, user_id, peer_id)
+        return True
 
-        @dp.callback_query(F.data == "admin_delete_account")
-        async def cb_admin_delete_account(c: CallbackQuery, state: FSMContext):
-            if not CONFIG["features"]["admin_delete_account"]:
-                await c.answer(T["feature_disabled"], show_alert=True)
-                return
-            
-            await state.clear()
-            await delete_all_bot_messages(c.from_user.id, bot_instance)
-            
-            if c.from_user.id != ADMIN_ID:
-                msg = await bot_instance.send_message(c.from_user.id, T["no_access"], reply_markup=kb_back())
-                record_message(c.from_user.id, msg, "command")
-                await c.answer()
-                return
-            
-            await state.set_state(AdminStates.delete_account_input)
-            msg = await bot_instance.send_message(c.from_user.id, T["admin_delete_prompt"], reply_markup=kb_admin_back())
-            record_message(c.from_user.id, msg, "command")
-            await c.answer()
+    return False
 
-        @dp.message(AdminStates.delete_account_input)
-        async def step_admin_delete_account(m: Message, state: FSMContext):
-            if m.text.strip() in (T["cancel"], T["admin_back"]):
-                await state.clear()
-                await delete_all_bot_messages(m.from_user.id, bot_instance)
-                msg = await bot_instance.send_message(m.from_user.id, T["admin_panel"], reply_markup=kb_admin())
-                record_message(m.from_user.id, msg, "command")
-                await delete_user_message(m)
-                return
-            
-            email = m.text.strip()
-            
-            try:
-                is_valid, error_msg = validate_email(email, strict=True)
-                if not is_valid:
-                    msg = await bot_instance.send_message(m.from_user.id, T["admin_delete_error"].format(error=error_msg or "Некорректный e-mail"), reply_markup=kb_admin_back())
-                    record_message(m.from_user.id, msg, "command")
-                    await delete_user_message(m)
-                    return
-                
-                # Получаем информацию об аккаунте
-                username, telegram_id = await get_account_by_email(pool, email)
-                if not username:
-                    msg = await bot_instance.send_message(m.from_user.id, T["admin_delete_error"].format(error="Аккаунт не найден"), reply_markup=kb_admin_back())
-                    record_message(m.from_user.id, msg, "command")
-                    await delete_user_message(m)
-                    return
-                
-                # Сохраняем данные для подтверждения
-                await state.update_data(email=email, username=username, telegram_id=telegram_id)
-                await state.set_state(AdminStates.delete_account_confirm)
-                
-                # Показываем предупреждение с подтверждением
-                confirm_text = T["admin_delete_confirm"].format(email=email, username=username)
-                confirm_keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                    [
-                        InlineKeyboardButton(text=T["admin_delete_confirm_yes"], callback_data="admin_confirm_delete"),
-                        InlineKeyboardButton(text=T["admin_delete_confirm_no"], callback_data="admin_back")
-                    ]
-                ])
-                
-                await delete_user_message(m)
-                # Отправляем новое сообщение с предупреждением
-                msg = await bot_instance.send_message(m.from_user.id, confirm_text, reply_markup=confirm_keyboard)
-                record_message(m.from_user.id, msg, "command")
-            
-            except Exception as e:
-                logger.error(f"Ошибка при получении информации об аккаунте: {e}")
-                await state.clear()
-                msg = await bot_instance.send_message(m.from_user.id, T["admin_delete_error"].format(error=str(e)), reply_markup=kb_admin_back())
-                record_message(m.from_user.id, msg, "command")
-                await delete_user_message(m)
 
-        @dp.callback_query(F.data == "admin_confirm_delete")
-        async def cb_admin_confirm_delete(c: CallbackQuery, state: FSMContext):
-            if c.from_user.id != ADMIN_ID:
-                await c.answer(T["no_access"], show_alert=True)
-                return
-            
-            data = await state.get_data()
-            email = data.get("email")
-            username = data.get("username")
-            telegram_id = data.get("telegram_id")
-            
-            if not email:
-                await c.answer("❌ Ошибка: данные не найдены", show_alert=True)
-                await state.clear()
-                await safe_edit_message(bot_instance, c, T["admin_panel"], reply_markup=kb_admin())
-                return
-            
-            try:
-                # Удаляем аккаунт
-                success, deleted_telegram_id = await admin_delete_account(pool, email)
-                await state.clear()
-                
-                if success:
-                    # Отправляем уведомление пользователю, если он существует
-                    if deleted_telegram_id:
-                        try:
-                            notification_text = T["account_deleted_by_admin"].format(email=email, username=username)
-                            await bot_instance.send_message(deleted_telegram_id, notification_text)
-                            logger.info(f"Уведомление об удалении отправлено пользователю {deleted_telegram_id}")
-                        except Exception as e:
-                            logger.warning(f"Не удалось отправить уведомление пользователю {deleted_telegram_id}: {e}")
-                    
-                    # Уведомляем админа об успехе
-                    await safe_edit_message(bot_instance, c, T["admin_delete_success"].format(email=email), reply_markup=kb_admin_back())
-                else:
-                    await safe_edit_message(bot_instance, c, T["admin_delete_error"].format(error="Не удалось удалить аккаунт"), reply_markup=kb_admin_back())
-            
-            except Exception as e:
-                logger.error(f"Ошибка при удалении аккаунта админом: {e}")
-                await state.clear()
-                await safe_edit_message(bot_instance, c, T["admin_delete_error"].format(error=str(e)), reply_markup=kb_admin_back())
-            
-            await c.answer()
+async def handle_text(api, pool, user_id, peer_id, text, fsm, msg_id):
+    """Текстовый ввод для административных состояний."""
+    ctx = fsm.get_context(user_id)
+    cur = await ctx.get_state()
 
-    if CONFIG["features"]["admin_reload_config"]:
-        @dp.callback_query(F.data == "admin_reload_config")
-        async def cb_admin_reload_config(c: CallbackQuery, state: FSMContext):
-            if not CONFIG["features"]["admin_reload_config"]:
-                await c.answer(T["feature_disabled"], show_alert=True)
-                return
-            
-            await state.clear()
-            await delete_all_bot_messages(c.from_user.id, bot_instance)
-            
-            if c.from_user.id != ADMIN_ID:
-                msg = await bot_instance.send_message(c.from_user.id, T["no_access"], reply_markup=kb_back())
-                record_message(c.from_user.id, msg, "command")
-                await c.answer()
-                return
-            
-            try:
-                from ..config.settings import reload_config
-                await reload_config(bot_instance)
-                msg = await bot_instance.send_message(c.from_user.id, T["reload_config_success"], reply_markup=kb_admin())
-            except Exception as e:
-                logger.error(f"Ошибка при перезагрузке конфигурации: {e}")
-                msg = await bot_instance.send_message(c.from_user.id, T["reload_config_error"].format(error=str(e)), reply_markup=kb_admin())
-            
-            record_message(c.from_user.id, msg, "command")
-            await c.answer()
+    if cur == S.ADMIN_BROADCAST:
+        if text.strip() in (T["cancel"], T["admin_back"]):
+            await ctx.clear()
+            await delete_all_bot_messages(user_id, api)
+            mid = await api.send_message(peer_id, T["admin_panel"], kb_admin())
+            record_message(user_id, mid, "command")
+            await _try_delete(api, peer_id, msg_id)
+            return True
 
-    if CONFIG["features"]["admin_panel"]:
-        @dp.callback_query(F.data == "admin_main")
-        async def cb_admin_main(c: CallbackQuery, state: FSMContext):
-            if not CONFIG["features"]["admin_panel"]:
-                await c.answer(T["feature_disabled"], show_alert=True)
-                return
-            
-            await state.clear()
-            await delete_all_bot_messages(c.from_user.id, bot_instance)
-            msg = await bot_instance.send_message(c.from_user.id, T["start"], reply_markup=kb_main(is_admin=c.from_user.id == ADMIN_ID))
-            record_message(c.from_user.id, msg, "command")
-            await c.answer()
+        await ctx.clear()
+        await delete_all_bot_messages(user_id, api)
+        await _try_delete(api, peer_id, msg_id)
+
+        try:
+            users = await get_all_user_ids(pool)
+            ok = fail = 0
+            for uid in users:
+                try:
+                    await api.send_message(uid, text)
+                    ok += 1
+                except Exception as e:
+                    logger.warning(f"Не удалось отправить рассылку vk_id {uid}: {e}")
+                    fail += 1
+            txt = f"✅ Успех: {ok} | ❌ Ошибок: {fail}"
+        except Exception as e:
+            logger.error(f"Ошибка рассылки: {e}")
+            txt = f"❌ {e}"
+
+        mid = await api.send_message(peer_id, txt, kb_admin_back())
+        record_message(user_id, mid, "command")
+        return True
+
+    if cur == S.ADMIN_DELETE_INPUT:
+        if text.strip() in (T["cancel"], T["admin_back"]):
+            await ctx.clear()
+            await delete_all_bot_messages(user_id, api)
+            mid = await api.send_message(peer_id, T["admin_panel"], kb_admin())
+            record_message(user_id, mid, "command")
+            await _try_delete(api, peer_id, msg_id)
+            return True
+
+        email = text.strip()
+        try:
+            is_valid, error_msg = validate_email(email, strict=True)
+            if not is_valid:
+                mid = await api.send_message(
+                    peer_id,
+                    T["admin_delete_error"].format(error=error_msg or "Некорректный e-mail"),
+                    kb_admin_back(),
+                )
+                record_message(user_id, mid, "command")
+                await _try_delete(api, peer_id, msg_id)
+                return True
+
+            username, owner_vk_id = await get_account_by_email(pool, email)
+            if not username:
+                mid = await api.send_message(
+                    peer_id,
+                    T["admin_delete_error"].format(error="Аккаунт не найден"),
+                    kb_admin_back(),
+                )
+                record_message(user_id, mid, "command")
+                await _try_delete(api, peer_id, msg_id)
+                return True
+
+            await ctx.update_data(email=email, username=username, owner_vk_id=owner_vk_id)
+            await ctx.set_state(S.ADMIN_DELETE_CONFIRM)
+
+            confirm_text = T["admin_delete_confirm"].format(email=email, username=username)
+            confirm_kb = {
+                "inline": True,
+                "buttons": [[
+                    {
+                        "action": {"type": "callback", "label": T["admin_delete_confirm_yes"], "payload": '{"cmd":"admin_confirm_delete"}'},
+                        "color": "negative",
+                    },
+                    {
+                        "action": {"type": "callback", "label": T["admin_delete_confirm_no"], "payload": '{"cmd":"admin_back"}'},
+                        "color": "primary",
+                    },
+                ]],
+            }
+            await _try_delete(api, peer_id, msg_id)
+            mid = await api.send_message(peer_id, confirm_text, confirm_kb)
+            record_message(user_id, mid, "command")
+        except Exception as e:
+            logger.error(f"Ошибка получения информации: {e}")
+            await ctx.clear()
+            mid = await api.send_message(peer_id, T["admin_delete_error"].format(error=str(e)), kb_admin_back())
+            record_message(user_id, mid, "command")
+            await _try_delete(api, peer_id, msg_id)
+        return True
+
+    return False
+
+
+async def _try_delete(api, peer_id, msg_id):
+    if msg_id:
+        try:
+            await api.delete_message(peer_id, msg_id)
+        except Exception:
+            pass

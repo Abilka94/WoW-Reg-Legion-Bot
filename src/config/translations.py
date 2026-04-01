@@ -1,12 +1,11 @@
 """
-Переводы и локализация
+Переводы и локализация (VK-версия — без HTML-тегов, эмодзи оставлены)
 """
 
-# Переводы (только русский)
 TRANSLATIONS = {
-    "start": "👋 Привет! Выберите действие:",
+    "start": "Привет! Выберите действие:",
     "progress": ["Введите никнейм", "Введите пароль", "Введите e-mail"],
-    "success": "✅ Аккаунт создан! Ваш логин: <code>{username}</code>",
+    "success": "✅ Аккаунт создан! Ваш логин: {username}",
     "err_mail": "❌ Некорректный e-mail.",
     "err_exists": "❌ Этот e-mail уже зарегистрирован. Пожалуйста, используйте другой e-mail.",
     "err_username_exists": "❌ Этот никнейм уже занят. Пожалуйста, выберите другой никнейм.",
@@ -20,7 +19,7 @@ TRANSLATIONS = {
     "menu_news": "Новости",
     "menu_acc": "🔑 Мой аккаунт",
     "menu_fgt": "🔄 Сбросить пароль",
-    "menu_admin": "📊Админ Панель",
+    "menu_admin": "📊 Админ Панель",
     "back": "◀ Назад",
     "cancel": "❌ Отмена",
     "version_pre": "Версия бота: ",
@@ -34,9 +33,9 @@ TRANSLATIONS = {
     "db_ok": "✅ База данных работает корректно.",
     "no_access": "❌ Нет доступа.",
     "to_main": "🏠 Главное меню",
-    "reset_success": "✅ Ваш временный пароль: <code>{password}</code>\nПожалуйста, смените его после входа.",
+    "reset_success": "✅ Ваш временный пароль: {password}\nПожалуйста, смените его после входа.",
     "reset_err_not_found": "❌ E-mail не найден.",
-    "account_info": "🔑 Ваш аккаунт:\nЛогин: <code>{username}</code>\nE-mail: <code>{email}</code>\nСтатус пароля: {password_status}",
+    "account_info": "🔑 Ваш аккаунт:\nЛогин: {username}\nE-mail: {email}\nСтатус пароля: {password_status}",
     "account_no_account": "❌ У вас нет зарегистрированного аккаунта.",
     "change_password_prompt": "🔄 Введите новый пароль:",
     "change_password_success": "✅ Пароль успешно изменен!",
@@ -44,12 +43,12 @@ TRANSLATIONS = {
     "delete_account_success": "✅ Аккаунт успешно удален!",
     "delete_account_error": "❌ Не удалось удалить аккаунт. Возможно, он не существует.",
     "admin_delete_prompt": "Введите e-mail аккаунта для удаления:",
-    "admin_delete_confirm": "⚠️ ВНИМАНИЕ! Вы уверены, что хотите удалить аккаунт?\n\n📧 E-mail: <code>{email}</code>\n👤 Логин: <code>{username}</code>\n\n❌ Это действие нельзя отменить!",
+    "admin_delete_confirm": "⚠️ ВНИМАНИЕ! Вы уверены, что хотите удалить аккаунт?\n\n📧 E-mail: {email}\n👤 Логин: {username}\n\n❌ Это действие нельзя отменить!",
     "admin_delete_confirm_yes": "✅ Да, удалить",
     "admin_delete_confirm_no": "❌ Отмена",
     "admin_delete_success": "✅ Аккаунт успешно удален: email={email}",
     "admin_delete_error": "❌ Не удалось удалить аккаунт: {error}",
-    "account_deleted_by_admin": "⚠️ Ваш аккаунт был удален администратором.\n\n📧 E-mail: <code>{email}</code>\n👤 Логин: <code>{username}</code>",
+    "account_deleted_by_admin": "⚠️ Ваш аккаунт был удален администратором.\n\n📧 E-mail: {email}\n👤 Логин: {username}",
     "select_account_prompt": "Выберите аккаунт для просмотра:",
     "feature_disabled": "❌ Эта функция отключена.",
     "reload_config_success": "✅ Конфигурация успешно перезагружена.",

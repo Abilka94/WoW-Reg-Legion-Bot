@@ -1,70 +1,97 @@
 """
-Клавиатуры для пользователей
+Клавиатуры для пользователей — VK inline (callback_data → payload).
+VK использует JSON-клавиатуру с массивом buttons и флагами inline/one_time.
 """
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from ..config.settings import CONFIG
 from ..config.translations import TRANSLATIONS as T
 
-def kb_main(is_admin: bool = False):
-    """Главное меню"""
-    buttons = []
-    
+
+def _btn(label: str, payload: str, color: str = "primary"):
+    """Создаёт callback-кнопку VK."""
+    return {
+        "action": {
+            "type": "callback",
+            "label": label,
+            "payload": f'{{"cmd":"{payload}"}}',
+        },
+        "color": color,
+    }
+
+
+def _text_btn(label: str, payload: str, color: str = "primary"):
+    """Создаёт текстовую кнопку VK (отправляет payload при нажатии)."""
+    return {
+        "action": {
+            "type": "text",
+            "label": label,
+            "payload": f'{{"cmd":"{payload}"}}',
+        },
+        "color": color,
+    }
+
+
+def _inline_kb(rows: list[list[dict]]) -> dict:
+    return {"inline": True, "buttons": rows}
+
+
+def kb_main(is_admin: bool = False) -> dict:
+    rows: list[list[dict]] = []
     if CONFIG["features"]["registration"]:
-        buttons.append([InlineKeyboardButton(text=T["menu_reg"], callback_data="reg_start")])
-    
-    buttons.append([
-        InlineKeyboardButton(text=T["menu_info"], callback_data="show_info"),
-        InlineKeyboardButton(text=T["menu_news"], callback_data="show_news")
+        rows.append([_btn(T["menu_reg"], "reg_start", "positive")])
+    rows.append([
+        _btn(T["menu_info"], "show_info", "primary"),
+        _btn(T["menu_news"], "show_news", "primary"),
     ])
-    
-    row = []
     if CONFIG["features"]["account_management"]:
-        row.append(InlineKeyboardButton(text=T["menu_acc"], callback_data="my_account"))
-    if row:
-        buttons.append(row)
-    
+        rows.append([_btn(T["menu_acc"], "my_account", "primary")])
     if is_admin:
-        buttons.append([InlineKeyboardButton(text=T["menu_admin"], callback_data="open_admin_panel")])
+        rows.append([_btn(T["menu_admin"], "open_admin_panel", "primary")])
+    return _inline_kb(rows)
 
-    return InlineKeyboardMarkup(inline_keyboard=buttons)
 
-def kb_wizard(step):
-    """Клавиатура для мастера регистрации"""
-    btns = []
+def kb_wizard(step: int) -> dict:
+    btns: list[dict] = []
     if step > 0:
-        btns.append(InlineKeyboardButton(text=T["back"], callback_data="wiz_back"))
-    btns.append(InlineKeyboardButton(text=T["cancel"], callback_data="wiz_cancel"))
-    return InlineKeyboardMarkup(inline_keyboard=[btns])
+        btns.append(_btn(T["back"], "wiz_back", "primary"))
+    btns.append(_btn(T["cancel"], "wiz_cancel", "negative"))
+    return _inline_kb([btns])
 
-def kb_back():
-    """Клавиатура с кнопкой назад"""
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=T["to_main"], callback_data="back_to_main")]
+
+def kb_back() -> dict:
+    return _inline_kb([[_btn(T["to_main"], "back_to_main", "primary")]])
+
+
+def kb_ok() -> dict:
+    return _inline_kb([[_btn("OK", "error_ok", "secondary")]])
+
+
+def kb_account_list(accounts, selected_email=None) -> dict:
+    rows: list[list[dict]] = []
+    for email, username, is_temp, temp_password in accounts:
+        label = f"📧 {email}" + (" ✅" if email == selected_email else "")
+        rows.append([_btn(label[:40], f"select_account_{email}", "secondary")])
+    if selected_email and CONFIG["features"]["account_management"]:
+        rows.append([_btn(T["menu_fgt"], f"reset_password_{selected_email}", "primary")])
+        rows.append([_btn("🔄 Сменить пароль", f"change_password_{selected_email}", "primary")])
+        rows.append([_btn("🗑 Удалить аккаунт", f"delete_account_{selected_email}", "negative")])
+    rows.append([_btn(T["to_main"], "back_to_main", "primary")])
+    return _inline_kb(rows)
+
+
+def kb_password_weak_choice() -> dict:
+    return _inline_kb([
+        [
+            _btn("✅ Использовать", "use_weak_password", "positive"),
+            _btn("🔄 Другой", "change_weak_password", "primary"),
+        ],
+        [_btn(T["cancel"], "wiz_cancel", "negative")],
     ])
 
-def kb_account_list(accounts, selected_email=None):
-    """Клавиатура со списком аккаунтов"""
-    buttons = []
-    
-    for email, username, is_temp, temp_password in accounts:
-        text = f"📧 {email} {'✅' if email == selected_email else ''}"
-        buttons.append([InlineKeyboardButton(text=text, callback_data=f"select_account_{email}")])
-    
-    if selected_email:
-        if CONFIG["features"]["account_management"]:
-            buttons.append([InlineKeyboardButton(text=T["menu_fgt"], callback_data=f"reset_password_{selected_email}")])
-            buttons.append([InlineKeyboardButton(text="🔄 Сменить пароль", callback_data="change_password")])
-            buttons.append([InlineKeyboardButton(text="🗑 Удалить аккаунт", callback_data=f"delete_account_{selected_email}")])
-    
-    buttons.append([InlineKeyboardButton(text=T["to_main"], callback_data="back_to_main")])
-    return InlineKeyboardMarkup(inline_keyboard=buttons)
 
-def kb_password_weak_choice():
-    """Клавиатура для выбора при простом пароле"""
-    return InlineKeyboardMarkup(inline_keyboard=[
+def kb_delete_confirm() -> dict:
+    return _inline_kb([
         [
-            InlineKeyboardButton(text="✅ Использовать этот пароль", callback_data="use_weak_password"),
-            InlineKeyboardButton(text="🔄 Ввести другой", callback_data="change_weak_password")
-        ],
-        [InlineKeyboardButton(text=T["cancel"], callback_data="wiz_cancel")]
+            _btn(T["admin_delete_confirm_yes"], "confirm_delete_yes", "negative"),
+            _btn(T["admin_delete_confirm_no"], "confirm_delete_no", "primary"),
+        ]
     ])

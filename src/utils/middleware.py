@@ -1,69 +1,38 @@
 """
-Middleware для ограничения частоты запросов и защиты от повторных нажатий
+Rate-limit и защита от дублирующих событий для VK.
 """
 import time
-import asyncio
-from aiogram.types import CallbackQuery
+import logging
+
+logger = logging.getLogger("bot")
+
 
 class RateLimit:
-    """Middleware для ограничения частоты запросов и блокировки параллельных запросов"""
-    def __init__(self, seconds=1.0):
+    def __init__(self, seconds: float = 1.0):
         self.seconds = seconds
-        self.last = {}
-        # Блокировки для каждого пользователя (предотвращает параллельные запросы)
-        self.locks = {}
-        # Обрабатываемые callback'и (предотвращает повторную обработку)
-        self.processing_callbacks = set()
+        self.last: dict[int, float] = {}
+        self.processing: set[str] = set()
 
-    async def __call__(self, handler, event, data):
-        user = getattr(event, "from_user", None) or getattr(event.message, "from_user", None)
-        
-        if not user:
-            return await handler(event, data)
-        
-        uid = user.id
+    def check(self, user_id: int, event_id: str | None = None) -> bool:
+        """Возвращает True если запрос разрешён."""
         now = time.time()
-        
-        # Проверка rate limit
-        if now - self.last.get(uid, 0) < self.seconds:
-            if isinstance(event, CallbackQuery):
-                try:
-                    await event.answer("⏱ Слишком много запросов. Подождите немного.", show_alert=False)
-                except Exception:
-                    pass
-            return
-        
-        # Для callback запросов - проверка на дубликаты
-        if isinstance(event, CallbackQuery):
-            callback_id = f"{uid}_{event.id}"
-            if callback_id in self.processing_callbacks:
-                try:
-                    await event.answer("⏱ Запрос уже обрабатывается...", show_alert=False)
-                except Exception:
-                    pass
-                return
-            
-            # Добавляем в обрабатываемые
-            self.processing_callbacks.add(callback_id)
-        
-        # Для callback'ов не используем блокировку - только rate limiting и проверка дубликатов
-        # Это предотвращает зависания при ошибках в обработчиках
-        try:
-            self.last[uid] = now
-            return await handler(event, data)
-        finally:
-            # Удаляем callback из обрабатываемых после завершения
-            if isinstance(event, CallbackQuery):
-                callback_id = f"{uid}_{event.id}"
-                self.processing_callbacks.discard(callback_id)
-        
-        # Очистка старых блокировок (если пользователь неактивен более 5 минут)
-        if len(self.locks) > 1000:
-            # Простая очистка: удаляем блокировки для неактивных пользователей
-            inactive_users = [
-                u for u, last_time in self.last.items()
-                if now - last_time > 300  # 5 минут
-            ]
-            for inactive_uid in inactive_users[:100]:  # Удаляем максимум 100 за раз
-                self.locks.pop(inactive_uid, None)
-                self.last.pop(inactive_uid, None)
+        if now - self.last.get(user_id, 0) < self.seconds:
+            return False
+        if event_id:
+            key = f"{user_id}_{event_id}"
+            if key in self.processing:
+                return False
+            self.processing.add(key)
+        self.last[user_id] = now
+        return True
+
+    def release(self, user_id: int, event_id: str | None = None):
+        if event_id:
+            self.processing.discard(f"{user_id}_{event_id}")
+
+    def cleanup(self):
+        """Удаляет записи старше 5 минут."""
+        now = time.time()
+        stale = [uid for uid, t in self.last.items() if now - t > 300]
+        for uid in stale[:100]:
+            self.last.pop(uid, None)

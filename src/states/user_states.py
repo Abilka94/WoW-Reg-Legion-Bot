@@ -1,30 +1,22 @@
 """
-FSM States для различных процессов
+Строковые константы состояний FSM.
+В VK-версии FSM хранит строки, а не объекты StatesGroup.
 """
-from aiogram.fsm.state import State, StatesGroup
 
-class RegistrationStates(StatesGroup):
-    """Состояния для процесса регистрации"""
-    nick = State()
-    pwd = State()
-    pwd_confirm_weak = State()  # Подтверждение использования простого пароля
-    mail = State()
+# Регистрация
+REG_NICK = "reg:nick"
+REG_PWD = "reg:pwd"
+REG_PWD_WEAK = "reg:pwd_confirm_weak"
+REG_MAIL = "reg:mail"
 
-class ForgotPasswordStates(StatesGroup):
-    """Состояния для восстановления пароля"""
-    email = State()
+# Смена пароля
+CHANGE_PWD = "change:new_password"
+CHANGE_PWD_WEAK = "change:pwd_confirm_weak"
 
-class AdminStates(StatesGroup):
-    """Состояния для административных функций"""
-    broadcast_text = State()
-    delete_account_input = State()
-    delete_account_confirm = State()
+# Удаление аккаунта (подтверждение пользователем)
+USER_DELETE_CONFIRM = "user:delete_confirm"
 
-class ChangePasswordStates(StatesGroup):
-    """Состояния для смены пароля"""
-    new_password = State()
-    password_confirm_weak = State()  # Подтверждение использования простого пароля
-
-class UserAccountStates(StatesGroup):
-    """Состояния для управления аккаунтом пользователем"""
-    delete_confirm = State()  # Подтверждение удаления аккаунта
+# Админ
+ADMIN_BROADCAST = "admin:broadcast_text"
+ADMIN_DELETE_INPUT = "admin:delete_account_input"
+ADMIN_DELETE_CONFIRM = "admin:delete_account_confirm"
